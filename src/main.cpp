@@ -32,10 +32,10 @@ int main(int argc, char *argv[])
     {
         cout<<"Usage:"<<endl;
         cout<<"  DNN:"<<endl;
-        cout<<"    Train mode: ./nn dnn train <dataset name> <network cfg file> <load weights file[null]> <save weights file[null]>"<<endl;
-        cout<<"    Test  mode: ./nn dnn test  <dataset name> <network cfg file> <load weights file>"<<endl;
+        cout<<"    Train mode: ./learning dnn train <dataset name> <network cfg file> <load weights file[null]> <save weights file[null]>"<<endl;
+        cout<<"    Test  mode: ./learning dnn test  <dataset name> <network cfg file> <load weights file>"<<endl;
         cout<<"  DRL:"<<endl;
-        cout<<"    ./nn drl <network cfg file> <load weights file[null]> <save weights file[null]>"<<endl;
+        cout<<"    ./learning drl <network cfg file> <load weights file[null]> <save weights file[null]>"<<endl;
         exit(0);
     }
 
