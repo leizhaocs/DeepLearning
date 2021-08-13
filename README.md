@@ -23,7 +23,7 @@ This framework supports two running modes: *dnn* and *drl*.
 
 ### dnn mode
 
-dnn mode is to for conventional CNN training and testing. The command line for training is as following:
+dnn mode is for conventional CNN training and testing. The command line for training is as following:
 ```
 ./learning dnn train <dataset name> <network cfg file> <load weights file[null]> <save weights file[null]> [-cpu]
 ```
@@ -31,7 +31,7 @@ The command line for testing is as following:
 ```
 ./learning dnn test  <dataset name> <network cfg file> <load weights file> [-cpu]
 ```
-If no `<load weights file>` is set to null, the network will randomly initialize the weights. If no `<save weights file>` is set to null, the trained weights will not be saved. If `-cpu` is present, the framework will not use CUDA acceleration even if it is compiled with `GPU=1` in Makefile.
+If `<load weights file>` is set to null, the network will randomly initialize the weights. If `<save weights file>` is set to null, the trained weights will not be saved. If `-cpu` is present, the framework will not use CUDA acceleration even if it is compiled with `GPU=1` in Makefile.
 
 An example of training MNIST with CUDA acceleration is as following:
 ```
