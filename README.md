@@ -27,10 +27,20 @@ dnn mode is to for conventional CNN training and testing. The command line for t
 ```
 ./learning dnn train <dataset name> <network cfg file> <load weights file[null]> <save weights file[null]> [-cpu]
 ```
-  The command line for testing is as following:
-  ```
-  ./nn dnn test  <dataset name> <network cfg file> <load weights file>
-  ```
+The command line for testing is as following:
+```
+./learning dnn test  <dataset name> <network cfg file> <load weights file> [-cpu]
+```
+If no `<load weights file>` is set to null, the network will randomly initialize the weights. If no `<save weights file>` is set to null, the trained weights will not be saved. If `-cpu` is present, the framework will not use CUDA acceleration even if it is compiled with `GPU=1` in Makefile.
+
+An example of training MNIST with CUDA acceleration is as following:
+```
+./learning dnn train mnist cfg/mnist_cnn.cfg null weights/mnist_cnn.weights
+```
+An example of test MNIST without CUDA acceleration is as following:
+```
+./learning dnn test mnist cfg/mnist_cnn.cfg weights/mnist_cnn.weights -cpu
+```
 
 ### drl mode
 
