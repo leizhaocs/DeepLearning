@@ -10,6 +10,8 @@ This framework is written in C++ and CUDA. It supports the following features:
 - Support building the network structure by using a configuration file.
 - Deep reinforcement learning (being implemented).
 
+More details of the framework and the underlying implementation details are on https://leizhaocs.github.io/DeepLearning/.
+
 ## Build
 
 Simply type `make` to compile the code. If you want to compile the code without CUDA acceleration, change the first line in Makefile to:
