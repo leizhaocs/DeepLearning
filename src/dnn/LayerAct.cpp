@@ -50,53 +50,23 @@ LayerAct::~LayerAct()
 /* forward propagation */
 void LayerAct::cpu_forward(int realBatchSize, bool train)
 {
-    clear(forwardTensor_->size(), forwardTensor_->getCpuPtr());
+    clear(forwardTensor_);
 
     if (nonlinear_ == "relu")
     {
-        for (int i = 0; i < forwardTensor_->size(); i++)
-        {
-            if (prev_layer_->forwardTensor_->data(i) > 0)
-            {
-                forwardTensor_->data(i) = prev_layer_->forwardTensor_->data(i);
-            }
-            else
-            {
-                forwardTensor_->data(i) = 0;
-            }
-        }
+        relu(prev_layer_->forwardTensor_, forwardTensor_);
     }
     else if (nonlinear_ == "sigmoid")
     {
-        for (int i = 0; i < forwardTensor_->size(); i++)
-        {
-            forwardTensor_->data(i) = exp((float)prev_layer_->forwardTensor_->data(i));
-            forwardTensor_->data(i) = forwardTensor_->data(i) / (forwardTensor_->data(i) + 1);
-        }
+        sigmoid(prev_layer_->forwardTensor_, forwardTensor_);
+    }
+    else if (nonlinear_ == "tanh")
+    {
+        tanh(prev_layer_->forwardTensor_, forwardTensor_);
     }
     else if (nonlinear_ == "softmax")
     {
-        for (int n = 0; n < realBatchSize; n++)
-        {
-            float max = -FLT_MAX;
-            for (int i = 0; i < sample_size_; i++)
-            {
-                if (prev_layer_->forwardTensor_->data(n, i) > max)
-                {
-                    max = prev_layer_->forwardTensor_->data(n, i);
-                }
-            }
-            float sum = 0;
-            for (int i = 0; i < sample_size_; i++)
-            {
-                forwardTensor_->data(n, i) = exp((float)(prev_layer_->forwardTensor_->data(n, i)-max));
-                sum += forwardTensor_->data(n, i);
-            }
-            for (int i = 0; i < sample_size_; i++)
-            {
-                forwardTensor_->data(n, i) /= sum;
-            }
-        }
+        softmax(prev_layer_->forwardTensor_, forwardTensor_);
     }
     else
     {
@@ -107,50 +77,23 @@ void LayerAct::cpu_forward(int realBatchSize, bool train)
 /* backward propagation */
 void LayerAct::cpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
-
-    clear(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getCpuPtr());
+    clear(prev_layer_->backwardTensor_);
 
     if (nonlinear_ == "relu")
     {
-        for (int i = 0; i < prev_layer_->backwardTensor_->size(); i++)
-        {
-            if (prev_layer_->forwardTensor_->data(i) > 0)
-            {
-                prev_layer_->backwardTensor_->data(i) = backwardTensor_->data(i);
-            }
-            else
-            {
-                prev_layer_->backwardTensor_->data(i) = 0;
-            }
-        }
+        backward_relu(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
     }
     else if (nonlinear_ == "sigmoid")
     {
-        for (int i = 0; i < prev_layer_->backwardTensor_->size(); i++)
-        {
-            prev_layer_->backwardTensor_->data(i) = backwardTensor_->data(i) * forwardTensor_->data(i) * (1 - forwardTensor_->data(i));
-        }
+        backward_sigmoid(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
+    }
+    else if (nonlinear_ == "tanh")
+    {
+        backward_tanh(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
     }
     else if (nonlinear_ == "softmax")
     {
-        for (int n = 0; n < realBatchSize; n++)
-        {
-            for (int i = 0; i < sample_size_; i++)
-            {
-                if (backwardTensor_->data(n, i) != 0)
-                {
-                    prev_layer_->backwardTensor_->data(n, i) = forwardTensor_->data(n, i) - 1;
-                }
-                else
-                {
-                    prev_layer_->backwardTensor_->data(n, i) = forwardTensor_->data(n, i);
-                }
-            }
-        }
+        backward_softmax(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
     }
     else
     {
@@ -167,19 +110,23 @@ void LayerAct::cpu_update(int realBatchSize, float lr)
 /* forward propagation */
 void LayerAct::gpu_forward(int realBatchSize, bool train)
 {
-    clear_gpu(forwardTensor_->size(), forwardTensor_->getGpuPtr());
+    clear_gpu(forwardTensor_);
 
     if (nonlinear_ == "relu")
     {
-        relu_gpu(prev_layer_->forwardTensor_->getGpuPtr(), forwardTensor_->getGpuPtr(), realBatchSize*sample_size_);
+        relu_gpu(prev_layer_->forwardTensor_, forwardTensor_);
     }
     else if (nonlinear_ == "sigmoid")
     {
-        sigmoid_gpu(prev_layer_->forwardTensor_->getGpuPtr(), forwardTensor_->getGpuPtr(), realBatchSize*sample_size_);
+        sigmoid_gpu(prev_layer_->forwardTensor_, forwardTensor_);
+    }
+    else if (nonlinear_ == "tanh")
+    {
+        tanh_gpu(prev_layer_->forwardTensor_, forwardTensor_);
     }
     else if (nonlinear_ == "softmax")
     {
-        softmax_gpu(prev_layer_->forwardTensor_->getGpuPtr(), forwardTensor_->getGpuPtr(), sample_size_, realBatchSize);
+        softmax_gpu(prev_layer_->forwardTensor_, forwardTensor_);
     }
     else
     {
@@ -190,27 +137,23 @@ void LayerAct::gpu_forward(int realBatchSize, bool train)
 /* backward propagation */
 void LayerAct::gpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
-
-    clear_gpu(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getGpuPtr());
+    clear_gpu(prev_layer_->backwardTensor_);
 
     if (nonlinear_ == "relu")
     {
-        backward_relu_gpu(backwardTensor_->getGpuPtr(), forwardTensor_->getGpuPtr(),
-            prev_layer_->backwardTensor_->getGpuPtr(), realBatchSize*sample_size_);
+        backward_relu_gpu(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
     }
     else if (nonlinear_ == "sigmoid")
     {
-        backward_sigmoid_gpu(backwardTensor_->getGpuPtr(), forwardTensor_->getGpuPtr(),
-            prev_layer_->backwardTensor_->getGpuPtr(), realBatchSize*sample_size_);
+        backward_sigmoid_gpu(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
+    }
+    else if (nonlinear_ == "tanh")
+    {
+        backward_tanh_gpu(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
     }
     else if (nonlinear_ == "softmax")
     {
-        backward_softmax_gpu(backwardTensor_->getGpuPtr(), forwardTensor_->getGpuPtr(),
-            prev_layer_->backwardTensor_->getGpuPtr(), sample_size_, realBatchSize);
+        backward_softmax_gpu(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
     }
     else
     {

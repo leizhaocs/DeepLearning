@@ -37,9 +37,8 @@ Agent::Agent(float epsilonStart, float epsilonEnd, float epsilonDecay, float lam
     int num_weights = policyNet_->getNumWeights(NULL);
     weights_ = new float[num_weights];
 
-    random_weights(weights_, num_weights, 0, 1, 0.001);
-    policyNet_->initWeights(weights_);
-    targetNet_->initWeights(weights_);
+    policyNet_->initWeights(NULL);
+    targetNet_->initWeights(NULL);
 }
 
 /* destructor */

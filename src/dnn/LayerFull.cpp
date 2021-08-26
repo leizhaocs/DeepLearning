@@ -58,7 +58,7 @@ LayerFull::~LayerFull()
 /* forward propagation */
 void LayerFull::cpu_forward(int realBatchSize, bool train)
 {
-    clear(forwardTensor_->size(), forwardTensor_->getCpuPtr());
+    clear(forwardTensor_);
 
     int m = realBatchSize;
     int n = sample_size_;
@@ -69,20 +69,15 @@ void LayerFull::cpu_forward(int realBatchSize, bool train)
     float *c = forwardTensor_->getCpuPtr();
 
     gemm(0, 1, m, n, k, a, k, b, k, c, n);
-    add_bias(forwardTensor_->getCpuPtr(), biases_->getCpuPtr(), realBatchSize, sample_size_, 1);
+    add_expand_channel(forwardTensor_, biases_);
 }
 
 /* backward propagation */
 void LayerFull::cpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
-
-    clear(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getCpuPtr());
-    clear(grad_weights_->size(), grad_weights_->getCpuPtr());
-    clear(grad_biases_->size(), grad_biases_->getCpuPtr());
+    clear(prev_layer_->backwardTensor_);
+    clear(grad_weights_);
+    clear(grad_biases_);
 
     int m = realBatchSize;
     int n = prev_layer_->sample_size_;
@@ -103,22 +98,22 @@ void LayerFull::cpu_backward(int realBatchSize)
     c = grad_weights_->getCpuPtr();
 
     gemm(1, 0, m, n, k, a, m, b, n, c, n);
-    backward_bias(grad_biases_->getCpuPtr(), backwardTensor_->getCpuPtr(), realBatchSize, sample_size_, 1);
+    backward_bias(grad_biases_, backwardTensor_);
 }
 
 /* update weights and biases */
 void LayerFull::cpu_update(int realBatchSize, float lr)
 {
     float step = -lr/realBatchSize;
-    axpy(weights_->size(), step, grad_weights_->getCpuPtr(), weights_->getCpuPtr());
-    axpy(biases_->size(), step, grad_biases_->getCpuPtr(), biases_->getCpuPtr());
+    axpy(weights_, grad_weights_, step);
+    axpy(biases_, grad_biases_, step);
 }
 
 #if GPU == 1
 /* forward propagation */
 void LayerFull::gpu_forward(int realBatchSize, bool train)
 {
-    clear_gpu(forwardTensor_->size(), forwardTensor_->getGpuPtr());
+    clear_gpu(forwardTensor_);
 
     int m = realBatchSize;
     int n = sample_size_;
@@ -129,20 +124,15 @@ void LayerFull::gpu_forward(int realBatchSize, bool train)
     float *c = forwardTensor_->getGpuPtr();
 
     gemm_gpu(0, 1, m, n, k, a, k, b, k, c, n);
-    add_bias_gpu(forwardTensor_->getGpuPtr(), biases_->getGpuPtr(), realBatchSize, sample_size_, 1);
+    add_expand_channel_gpu(forwardTensor_, biases_);
 }
 
 /* backward propagation */
 void LayerFull::gpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
-
-    clear_gpu(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getGpuPtr());
-    clear_gpu(grad_weights_->size(), grad_weights_->getGpuPtr());
-    clear_gpu(grad_biases_->size(), grad_biases_->getGpuPtr());
+    clear_gpu(prev_layer_->backwardTensor_);
+    clear_gpu(grad_weights_);
+    clear_gpu(grad_biases_);
 
     int m = realBatchSize;
     int n = prev_layer_->sample_size_;
@@ -163,32 +153,55 @@ void LayerFull::gpu_backward(int realBatchSize)
     c = grad_weights_->getGpuPtr();
 
     gemm_gpu(1, 0, m, n, k, a, m, b, n, c, n);
-    backward_bias_gpu(grad_biases_->getGpuPtr(), backwardTensor_->getGpuPtr(), realBatchSize, sample_size_, 1);
+    backward_bias_gpu(grad_biases_, backwardTensor_);
 }
 
 /* update weights and biases */
 void LayerFull::gpu_update(int realBatchSize, float lr)
 {
     float step = -lr/realBatchSize;
-    axpy_gpu(weights_->size(), step, grad_weights_->getGpuPtr(), weights_->getGpuPtr());
-    axpy_gpu(biases_->size(), step, grad_biases_->getGpuPtr(), biases_->getGpuPtr());
+    axpy_gpu(weights_, grad_weights_, step);
+    axpy_gpu(biases_, grad_biases_, step);
 }
 #endif
 
 /* initialize weights */
 void LayerFull::initWeights(float *weights, int &offset)
 {
-    for (int i = 0; i < weights_->size(); i++)
+    if (weights == NULL)
     {
-        weights_->data(i) = weights[offset+i];
-    }
-    offset += weights_->size();
+        int fan_in = prev_layer_->sample_size_;
+        float bound_weights = sqrt(6.0 / fan_in);
+        float bound_biases = sqrt(1.0 / fan_in);
 
-    for (int i = 0; i < biases_->size(); i++)
-    {
-        biases_->data(i) = weights[offset+i];
+        default_random_engine generator;
+        uniform_real_distribution<float> distribution_weights(bound_weights*-1, bound_weights);
+        uniform_real_distribution<float> distribution_biases(bound_biases*-1, bound_biases);
+
+        for (int i = 0; i < weights_->total_size(); i++)
+        {
+            weights_->data(i) = distribution_weights(generator);
+        }
+
+        for (int i = 0; i < biases_->total_size(); i++)
+        {
+            biases_->data(i) = distribution_biases(generator);
+        }
     }
-    offset += biases_->size();
+    else
+    {
+        for (int i = 0; i < weights_->total_size(); i++)
+        {
+            weights_->data(i) = weights[offset+i];
+        }
+        offset += weights_->total_size();
+
+        for (int i = 0; i < biases_->total_size(); i++)
+        {
+            biases_->data(i) = weights[offset+i];
+        }
+        offset += biases_->total_size();
+    }
 
 #if GPU == 1
     if (use_gpu)
@@ -210,24 +223,24 @@ void LayerFull::getWeights(float *weights, int &offset)
     }
 #endif
 
-    for (int i = 0; i < weights_->size(); i++)
+    for (int i = 0; i < weights_->total_size(); i++)
     {
         weights[offset+i] = weights_->data(i);
     }
-    offset += weights_->size();
+    offset += weights_->total_size();
 
-    for (int i = 0; i < biases_->size(); i++)
+    for (int i = 0; i < biases_->total_size(); i++)
     {
         weights[offset+i] = biases_->data(i);
     }
-    offset += biases_->size();
+    offset += biases_->total_size();
 }
 
 /* get number of weights in this layer */
 vector<int> LayerFull::getNumWeights()
 {
-    int nw = weights_->size();
-    int nb = biases_->size();
+    int nw = weights_->total_size();
+    int nb = biases_->total_size();
     vector<int> num_weights;
     num_weights.push_back(nw+nb);
     num_weights.push_back(nw);

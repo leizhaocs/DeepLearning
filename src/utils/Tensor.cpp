@@ -28,13 +28,15 @@ Tensor<T>::Tensor(int n, int c, int h, int w)
     c_ = c;
     h_ = h;
     w_ = w;
-    size_ = n * c * h * w;
+    total_size_ = n * c * h * w;
+    sample_size_ = c * h * w;
+    plane_size_ = h * w;
 
-    MemoryMonitor::instance()->cpuMalloc((void**)&data_cpu_, size_*sizeof(T));
+    MemoryMonitor::instance()->cpuMalloc((void**)&data_cpu_, total_size_*sizeof(T));
 #if GPU == 1
     if (use_gpu)
     {
-        MemoryMonitor::instance()->gpuMalloc((void**)&data_gpu_, size_*sizeof(T));
+        MemoryMonitor::instance()->gpuMalloc((void**)&data_gpu_, total_size_*sizeof(T));
     }
 #endif
 }
@@ -52,6 +54,65 @@ Tensor<T>::~Tensor()
 #endif
 }
 
+/* get cpu data pointer */
+template<typename T>
+T *Tensor<T>::getCpuPtr()
+{
+    return data_cpu_;
+}
+
+#if GPU == 1
+/* get gpu data pointer */
+template<typename T>
+T *Tensor<T>::getGpuPtr()
+{
+    return data_gpu_;
+}
+#endif
+
+/* get dimensions */
+template<typename T>
+int Tensor<T>::getN()
+{
+    return n_;
+}
+template<typename T>
+int Tensor<T>::getC()
+{
+    return c_;
+}
+template<typename T>
+int Tensor<T>::getH()
+{
+    return h_;
+}
+template<typename T>
+int Tensor<T>::getW()
+{
+    return w_;
+}
+
+/* get total number of elements */
+template<typename T>
+int Tensor<T>::total_size()
+{
+    return total_size_;
+}
+
+/* get number of elements in one sample */
+template<typename T>
+int Tensor<T>::sample_size()
+{
+    return sample_size_;
+}
+
+/* get number of elements in one plane */
+template<typename T>
+int Tensor<T>::plane_size()
+{
+    return plane_size_;
+}
+
 /* get data element */
 template<typename T>
 T &Tensor<T>::data(int i)
@@ -61,13 +122,19 @@ T &Tensor<T>::data(int i)
 template<typename T>
 T &Tensor<T>::data(int n, int i)
 {
-    int index = n*c_*h_*w_ + i;
+    int index = n*sample_size_ + i;
+    return data_cpu_[index];
+}
+template<typename T>
+T &Tensor<T>::data(int n, int c, int i)
+{
+    int index = n*sample_size_ + c*plane_size_ + i;
     return data_cpu_[index];
 }
 template<typename T>
 T &Tensor<T>::data(int n, int c, int h, int w)
 {
-    int index = ((n*c_ + c)*h_ + h)*w_ + w;
+    int index = n*sample_size_ + c*plane_size_ + h*w_ + w;
     return data_cpu_[index];
 }
 
@@ -76,7 +143,7 @@ T &Tensor<T>::data(int n, int c, int h, int w)
 template<typename T>
 void Tensor<T>::toGpu()
 {
-    cudaError_t cudaStat = cudaMemcpy(data_gpu_, data_cpu_, size_*sizeof(T), cudaMemcpyHostToDevice);
+    cudaError_t cudaStat = cudaMemcpy(data_gpu_, data_cpu_, total_size_*sizeof(T), cudaMemcpyHostToDevice);
     Assert(cudaStat == cudaSuccess, "To gpu data upload failed.");
 }
 
@@ -84,31 +151,8 @@ void Tensor<T>::toGpu()
 template<typename T>
 void Tensor<T>::toCpu()
 {
-    cudaError_t cudaStat = cudaMemcpy(data_cpu_, data_gpu_, size_*sizeof(T), cudaMemcpyDeviceToHost);
+    cudaError_t cudaStat = cudaMemcpy(data_cpu_, data_gpu_, total_size_*sizeof(T), cudaMemcpyDeviceToHost);
     Assert(cudaStat == cudaSuccess, "To cpu data download failed.");
-}
-#endif
-
-/* get total number of elements */
-template<typename T>
-int Tensor<T>::size()
-{
-    return size_;
-}
-
-/* get cpu data pointer */
-template<typename T>
-T *Tensor<T>::getCpuPtr()
-{
-    return data_cpu_;
-}
-
-#if GPU == 1
-/* get cpu data pointer */
-template<typename T>
-T *Tensor<T>::getGpuPtr()
-{
-    return data_gpu_;
 }
 #endif
 

@@ -34,9 +34,33 @@ public:
     /* destructor */
     ~Tensor();
 
+    /* get cpu data pointer */
+    T *getCpuPtr();
+
+#if GPU == 1
+    /* get gpu data pointer */
+    T *getGpuPtr();
+#endif
+
+    /* get dimensions */
+    int getN();
+    int getC();
+    int getH();
+    int getW();
+
+    /* get total number of elements */
+    int total_size();
+
+    /* get number of elements in one sample */
+    int sample_size();
+
+    /* get number of elements in one plane */
+    int plane_size();
+
     /* get data element */
     T &data(int i);
     T &data(int n, int i);
+    T &data(int n, int c, int i);
     T &data(int n, int c, int h, int w);
 
 #if GPU == 1
@@ -45,17 +69,6 @@ public:
 
     /* move data from gpu to cpu */
     void toCpu();
-#endif
-
-    /* get total number of elements */
-    int size();
-
-    /* get cpu data pointer */
-    T *getCpuPtr();
-
-#if GPU == 1
-    /* get cpu data pointer */
-    T *getGpuPtr();
 #endif
 
 private:
@@ -67,7 +80,9 @@ private:
     int c_;               // channel
     int h_;               // height
     int w_;               // width
-    int size_;            // total number of elements
+    int total_size_;            // total number of elements, n_*c_*h_*w_
+    int sample_size_;     // number of elements in one sample, c_*h_*w_
+    int plane_size_;      // number of elements in one plane, h_*w_
 };
 
 #endif

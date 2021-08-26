@@ -297,33 +297,10 @@ Params *build_network(const char *config, int &num_layers, int &num_epochs, int 
                     }
                 }
             }
-            else if(layername == "batchnormalization")
+            else if(layername == "batchnorm")
             {
-                layers[layer_index].addString("type", "batchnormalization");
+                layers[layer_index].addString("type", "batchnorm");
 
-                while (true)
-                {
-                    getline(cfg, line);
-                    if (line[0] == '#')
-                    {
-                        continue;
-                    }
-                    int pos = line.find('=');
-                    if (pos == string::npos)
-                    {
-                        break;
-                    }
-
-                    string key = line.substr(0, pos-1);
-                    if (key == "channels")
-                    {
-                        string value = line.substr(pos+1, string::npos);
-                        stringstream valuestream(value);
-                        int channels;
-                        valuestream >> channels;
-                        layers[layer_index].addScalari("channels", channels);
-                    }
-                }
             }
             else if(layername == "dropout")
             {

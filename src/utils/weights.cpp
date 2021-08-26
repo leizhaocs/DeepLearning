@@ -41,14 +41,3 @@ void load_weights(const char *weights_file, float *weights, int num_weights)
     }
     weights_fp.close();
 }
-
-/* randomly initializing weights */
-void random_weights(float *weights, int num_weights, float mean, float stddev, float scale)
-{
-    default_random_engine generator (105);
-    normal_distribution<double> distribution(mean, stddev);
-    for (int i = 0; i < num_weights; i++)
-    {
-        weights[i] = distribution(generator) * scale;
-    }
-}

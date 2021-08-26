@@ -1,0 +1,184 @@
+<!DOCTYPE HTML>
+<!--
+	Editorial by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+	<head>
+		<title>Batch Normalization Layer</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+	</head>
+	<body class="is-preload">
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Main -->
+					<div id="main">
+						<div class="inner">
+
+							<!-- Header -->
+								<header id="header">
+									<a href="index.html" class="logo"><strong>Lei Zhao</strong></a>
+								</header>
+
+							<!-- Content -->
+								<section>
+									<header class="main">
+										<h1>Batch Normalization Layer</h1>
+									</header>
+
+<!-- ------------------------------------------------------------------------------------------------------ -->
+
+<p>When I implemented the batch normalization layer, what confused me the most were the dimensions of the tensors and how to calculate their derivatives. So before I start, I would like to define some notations used in this description. To make the dimensions clear, I will carry the dimension information along each tensor in every equation.</p>
+
+<hr class="major" />
+
+<h2>Notations</h2>
+
+<p>\(\langle ... \rangle\) denotes the dimension of a tensor. For example, \(x_{\langle N,C,H,W \rangle}\) means a four-dimensional tensor.</p>
+<p>\(\cdot\) denotes element-wise multiplication between two tensors of the same size.</p>
+<p>\(\sum\limits_{...}\) denotes summation of a tensor along the specified dimensions. For example, \(\sum\limits_{N,H,W}(x_{\langle N,C,H,W \rangle})\) sums up the elements in the four-dimensional tensor along the \(N\), \(H\) and \(W\) dimensions, resulting in a \(C\)-element vector.</p>
+<p>\(\underset{...}{\Xi}\) denotes expansion of a vector into a multi-dimensional tensor. For example, \(\underset{N,C,H,W}{\Xi}(\gamma_{\langle C \rangle})\) expands the \(C\)-element vector into a four-dimensional tensor by replicating the existing values.</p>
+
+<hr class="major" />
+
+<h2>Forward Propagation</h2>
+
+<h3>Training</h3>
+
+<div style="background:lightgray;">
+For each batch:
+<ur>
+<li>Step 1: Calculate the mean of the batch
+$$\tilde{\mu}_{\langle C \rangle} = \frac{1}{N*H*W}\sum\limits_{N*H*W}(x_{\langle N,C,H,W \rangle})$$</li>
+<li>Step 2: Calculate the variance of the batch
+$$\tilde{\sigma}^2_{\langle C \rangle} = \frac{1}{N*H*W}\sum\limits_{N*H*W}(x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle}))^2$$</li>
+<li>Step 3: Normalize the input
+$$\hat{x}_{\langle N,C,H,W \rangle} = \frac{x_{\langle N,C,H,W \rangle}-\underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})}{\underset{N,H,W}{\Xi}(\sqrt{\tilde{\sigma}^2_{\langle C \rangle} + \epsilon})}$$</li>
+<li>Step 4: Scale and shift
+$$y_{\langle N,C,H,W \rangle} = \underset{N,H,W}{\Xi}(\gamma_{\langle C \rangle}) \cdot \hat{x}_{\langle N,C,H,W \rangle}+\underset{N,H,W}{\Xi}(\beta_{\langle C \rangle})$$</li>
+<li>Step 5: Update running mean and running variance
+$$\mu_{\langle C \rangle}=0.99*\mu_{\langle C \rangle} + 0.01*\tilde{\mu}_{\langle C \rangle}$$
+$$\sigma_{\langle C \rangle}=0.99*\sigma_{\langle C \rangle} + 0.01*\tilde{\sigma}_{\langle C \rangle}$$</li>
+</ur>
+</div>
+
+<p>Step 1 and Step 2 calculte the batch mean and batch variance. Please note the \(\sum\limits_{N,H,W}\) operator in the equations to reduce the dimension from \(\langle N,C,H,W \rangle\) to \(\langle C \rangle\). Step 3 normalizes the input with the batch mean and batch variance calculated in the previous two steps. Please not that before using the batch mean and batch variance, their dimensions need to be expanded to match the input using the \(\underset{N,H,W}{\Xi}\) operator. In Step 4, both \(\gamma_{\langle C \rangle}\) and \(\beta_{\langle C \rangle}\) are trainable parameters. The calculated \(y_{\langle N,C,H,W \rangle}\) will be passed to next layer as output. Because each batch only calculates the batch mean and batch variance, in order to get the mean and variance of the whole traing set, we update a running mean and running variance in Step 5 using the batch mean and batch variance.</p>
+
+
+<h3>Inference</h3>
+
+<div style="background:lightgray;">
+<ur>
+<li>Step 1: Normalize the input
+$$\hat{x}_{\langle N,C,H,W \rangle} = \frac{x_{\langle N,C,H,W \rangle}-\underset{N,H,W}{\Xi}(\mu_{\langle C \rangle})}{\underset{N,H,W}{\Xi}(\sqrt{\sigma^2_{\langle C \rangle} + \epsilon})}$$</li>
+<li>Step 2: Scale and shift
+$$y_{\langle N,C,H,W \rangle} = \underset{N,H,W}{\Xi}(\gamma_{\langle C \rangle}) \cdot \hat{x}_{\langle N,C,H,W \rangle}+\underset{N,H,W}{\Xi}(\beta_{\langle C \rangle})$$</li>
+</ur>
+</div>
+
+<p>In inference, we do not dynamically calculate the mean and variance any more. Instead, we normalize the input using the running mean and running variance calculated from the training phase. Then scale and shift the normalized input.</p>
+
+<hr class="major" />
+
+<h2>Backward Propagation</h2>
+
+<p>There are two ways to explain this. The first one is to use the computation graph. <a href="https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html">Frederik's post</a> is a good resource that uses this method. The second way is to use hand calculation. <a href="https://kevinzakka.github.io/2016/09/14/batch_normalization/">Kevin's post</a> is a good resource that uses this method. Accordingly, we can implement the code based on either the computation graph from the first post or the handcrafted equations from the second post. Howerver, since the computation graph generates a lot of intermediate results which will be canceled out if we use hand calculations, it is usually slower than the second method. So, here I only explain the second method, which is implemented in DeepLearning.</p>
+
+<h3>Calculate gradients of parameters \(\gamma_{\langle C \rangle}\) and \(\beta_{\langle C \rangle}\)</h3>
+
+<div style="background:lightgray;">
+$$\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \gamma_{\langle C \rangle}} = \sum_{N,H,W} (\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial y_{\langle N,C,H,W \rangle}} \cdot \hat{x}_{\langle N,C,H,W \rangle})$$
+$$\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \beta_{\langle C \rangle}} = \sum_{N,H,W} (\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial y_{\langle N,C,H,W \rangle}})$$
+</div>
+
+<p>These two equations are easy to understand according the equation in Step 4 of traning forward propagation. Please note that \(\partial L_{\langle N,C,H,W \rangle}\) is a four-dimentional tensor, while \(\partial \gamma_{\langle C \rangle}\) and \(\partial \beta_{\langle C \rangle}\) are vectors. So we need the \(\sum\limits_{N,H,W}\) operator to reduce the dimension from \(\langle N,C,H,W \rangle\) to \(\langle C \rangle\). 
+
+<h3>Calculate gradients of input \(x_{\langle N,C,W,H \rangle}\)</h3>
+
+<p>First calculate the gradients of \(\hat{x}_{\langle N,C,W,H \rangle}\) according to the equation of Step 4 in forward propagation training phase.</p>
+
+<div style="background:lightgray;">
+$$\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}} = \frac{\partial L_{\langle N,C,H,W \rangle}}{\partial y_{\langle N,C,H,W \rangle}} \cdot \underset{N,C,H,W}{\Xi}(\gamma_{\langle C \rangle})$$
+</div>
+
+<p>Then we divide the equation of Step 3 in forward propagation training phase into three parts, and calculate them separately.</p>
+
+<div style="background:lightgray;">
+$$\hat{x}_{\langle N,C,H,W \rangle} = \frac{\colorbox{#FFA500}{$x_{\langle N,C,H,W \rangle}$}-\colorbox{#ADFF2F}{$\underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})$}}{\colorbox{#87CEFA}{$\underset{N,H,W}{\Xi}(\sqrt{\tilde{\sigma}^2_{\langle C \rangle} + \epsilon})$}}$$
+</div>
+
+<ur>
+<li>Step 1: Orange part
+<div style="background:#FFA500;">
+$$\begin{eqnarray} 
+\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial x_{\langle N,C,H,W \rangle}} &=& \frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}} \cdot \frac{\partial \hat{x}_{\langle N,C,H,W \rangle}}{\partial x_{\langle N,C,H,W \rangle}} \\
+&=& \frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}} \cdot \frac{1}{\underset{N,H,W}{\Xi}(\sqrt{\tilde{\sigma}^2_{\langle C \rangle} + \epsilon})} \\
+&=& \frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}} \cdot \underset{N,H,W}{\Xi}(\frac{1}{\sqrt{\tilde{\sigma}^2_{\langle C \rangle} + \epsilon}}) \\
+\end{eqnarray}$$
+</div>
+</li>
+
+<li>Step 2: Green part
+<div style="background:#ADFF2F;">
+$$\begin{eqnarray} 
+\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial x_{\langle N,C,H,W \rangle}} &=& \frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}} \cdot \frac{\partial \hat{x}_{\langle N,C,H,W \rangle}}{\partial x_{\langle N,C,H,W \rangle}} \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \frac{\partial \hat{x}_{\langle N,C,H,W \rangle}}{\partial \tilde{\mu}_{\langle C \rangle}}) \cdot \frac{\partial \tilde{\mu}_{\langle C \rangle}}{\partial x_{\langle N,C,H,W \rangle}} \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \frac{-1}{\sqrt{\tilde{\sigma}^2_{\langle C \rangle} + \epsilon}}) \cdot \frac{\partial \tilde{\mu}_{\langle C \rangle}}{\partial x_{\langle N,C,H,W \rangle}} \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \frac{-1}{\sqrt{\tilde{\sigma}^2_{\langle C \rangle} + \epsilon}}) \cdot [\frac{1}{N*H*W}]_{\langle N,C,H,W \rangle} \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}})) \cdot \underset{N,H,W}{\Xi}(\frac{-1}{\sqrt{\tilde{\sigma}^2_{\langle C \rangle} + \epsilon}})) \cdot [\frac{1}{N*H*W}]_{\langle N,C,H,W \rangle} \\
+\end{eqnarray}$$
+</div>
+</li>
+
+<li>Step 3: Blue part
+<div style="background:#87CEFA;">
+$$\begin{eqnarray}
+\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial x_{\langle N,C,H,W \rangle}} &=& \frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}} \cdot \frac{\partial \hat{x}_{\langle N,C,H,W \rangle}}{\partial x_{\langle N,C,H,W \rangle}} \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \frac{\partial \hat{x}_{\langle N,C,H,W \rangle}}{\partial \tilde{\sigma}^2_{\langle C \rangle}}) \cdot \frac{\partial \tilde{\sigma}^2_{\langle C \rangle}}{\partial (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle}))} \cdot \frac{\partial (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle}))}{\partial x_{\langle N,C,H,W \rangle}} \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \sum_{N,H,W}(-[\frac{1}{2}]_{\langle N,C,H,W \rangle} \cdot (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})) \cdot \underset{N,H,W}{\Xi}(\tilde{\sigma}^2_{\langle C \rangle} + \epsilon)^{-\frac{3}{2}})) \cdot \frac{\partial \tilde{\sigma}^2_{\langle C \rangle}}{\partial (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle}))} \cdot \frac{\partial (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle}))}{\partial x_{\langle N,C,H,W \rangle}} \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \sum_{N,H,W}(-[\frac{1}{2}]_{\langle N,C,H,W \rangle} \cdot (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})) \cdot \underset{N,H,W}{\Xi}(\tilde{\sigma}^2_{\langle C \rangle} + \epsilon)^{-\frac{3}{2}})) \cdot [\frac{2}{N*H*W}]_{\langle N,C,H,W \rangle} \cdot (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})) \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \sum_{N,H,W}(-[\frac{1}{2}]_{\langle N,C,H,W \rangle} \cdot (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})) \cdot \underset{N,H,W}{\Xi}(\tilde{\sigma}^2_{\langle C \rangle} + \epsilon)^{-\frac{3}{2}})) \cdot [\frac{2}{N*H*W}]_{\langle N,C,H,W \rangle} \cdot (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})) \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \sum_{N,H,W}(-[\frac{1}{2}]_{\langle N,C,H,W \rangle} \cdot \hat{x}_{\langle N,C,H,W \rangle} \cdot \underset{N,H,W}{\Xi}(\tilde{\sigma}^2_{\langle C \rangle} + \epsilon)^{-1})) \cdot [\frac{2}{N*H*W}]_{\langle N,C,H,W \rangle} \cdot (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})) \\
+&=& \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot -[\frac{1}{2}]_{\langle C \rangle} \cdot (\tilde{\sigma}^2_{\langle C \rangle} + \epsilon)^{-1} \cdot \sum_{N,H,W}(\hat{x}_{\langle N,C,H,W \rangle})) \cdot [\frac{2}{N*H*W}]_{\langle N,C,H,W \rangle} \cdot (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})) \\
+&=& -[\frac{1}{2}]_{\langle N,C,H,W \rangle} \cdot \underset{N,H,W}{\Xi}(\tilde{\sigma}^2_{\langle C \rangle} + \epsilon)^{-1} \cdot \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \sum_{N,H,W}(\hat{x}_{\langle N,C,H,W \rangle})) \cdot [\frac{2}{N*H*W}]_{\langle N,C,H,W \rangle} \cdot (x_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\tilde{\mu}_{\langle C \rangle})) \\
+&=& -[\frac{1}{N*H*W}]_{\langle N,C,H,W \rangle} \cdot \underset{N,H,W}{\Xi}(\tilde{\sigma}^2_{\langle C \rangle} + \epsilon)^{-\frac{1}{2}} \cdot \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \sum_{N,H,W}(\hat{x}_{\langle N,C,H,W \rangle})) \cdot \hat{x}_{\langle N,C,H,W \rangle}
+\end{eqnarray}$$
+</div>
+</li>
+
+<li>Step 4: Combine these three parts
+<div style="background:lightgray;">
+$$\begin{eqnarray}
+\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial x_{\langle N,C,H,W \rangle}}
+&=& [\frac{1}{N*H*W}]_{\langle N,C,H,W \rangle} \cdot \underset{N,H,W}{\Xi}(\frac{1}{\sqrt{\tilde{\sigma}^2_{\langle C \rangle} + \epsilon}}) \cdot (\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}} \cdot [N*H*W]_{\langle N,C,H,W \rangle} - \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}})) - \cdot \underset{N,H,W}{\Xi}(\sum_{N,H,W}(\frac{\partial L_{\langle N,C,H,W \rangle}}{\partial \hat{x}_{\langle N,C,H,W \rangle}}) \cdot \sum_{N,H,W}(\hat{x}_{\langle N,C,H,W \rangle})) \cdot \hat{x}_{\langle N,C,H,W \rangle})
+\end{eqnarray}$$ 
+</div>
+</ur>
+
+<!-- ------------------------------------------------------------------------------------------------------ -->
+                                    
+								</section>
+
+						</div>
+					</div>
+
+                    <script src="sidebar.js"></script>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/browser.min.js"></script>
+			<script src="assets/js/breakpoints.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>

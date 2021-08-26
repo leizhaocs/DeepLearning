@@ -29,7 +29,4 @@ void store_weights(const char *weights_file, float *weights, int num_weights);
 /* load weights file */
 void load_weights(const char *weights_file, float *weights, int num_weights);
 
-/* randomly initializing weights */
-void random_weights(float *weights, int num_weights, float mean=0, float stddev=1, float scale=0.1);
-
 #endif

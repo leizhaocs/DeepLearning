@@ -96,9 +96,7 @@ void classify(Net *net, Tensor<float> *test_data, Tensor<float> *test_labels, Te
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> diff = end-start;
 
-    printf("--------------------------------\n");
-    printf("           Test Results         \n");
-    printf("acc: %f    time: %f s\n", test_acc, diff.count());
+    printf("test acc: %f    test time: %fs\n", test_acc, diff.count());
 }
 
 /* train the entire training data set for a number of epochs */
@@ -116,8 +114,7 @@ void train(Net *net,
 
     for (int epoch = 0; epoch < num_epochs; epoch++)
     {
-        printf("*************************************************\n");
-        printf("Epoch: %d/%d   learning rate:%f\n", epoch+1, num_epochs, lr);
+        printf("Epoch: %d/%d    lr:%f    ", epoch+1, num_epochs, lr);
 
         auto epoch_start = chrono::high_resolution_clock::now();
 
@@ -144,22 +141,17 @@ void train(Net *net,
 
         if (show_acc == 0)
         {
-            printf("--------------------------------\n");
             printf("time: %fs\n", epoch_diff.count());
         }
         else if (show_acc == 1)
         {
             float train_acc = accuracy(train_pred, train_labels, n_train, classes);
-            printf("--------------------------------\n");
-            printf("         Training Results       \n");
-            printf("acc: %f    time: %f s\n", train_acc, epoch_diff.count());
+            printf("training acc: %f    traing time: %fs\n", train_acc, epoch_diff.count());
         }
         else if (show_acc == 2)
         {
             float train_acc = accuracy(train_pred, train_labels, n_train, classes);
-            printf("--------------------------------\n");
-            printf("         Training Results       \n");
-            printf("acc: %f    time: %f s\n", train_acc, epoch_diff.count());
+            printf("training acc: %f    training time: %fs    ", train_acc, epoch_diff.count());
             classify(net, test_data, test_labels, test_pred, n_test, c, h, w, classes, batchSize);
         }
     }
@@ -169,7 +161,7 @@ void train(Net *net,
 
     printf("================================\n");
     printf("        Training Results        \n");
-    printf("time: %f s\n", diff.count());
+    printf("time: %fs\n", diff.count());
 }
 
 /* main function */
@@ -240,8 +232,7 @@ int main_dnn(int argc, char *argv[])
         {
             cout<<"Initializing weights..."<<endl;
 
-            random_weights(weights, num_weights, 0, 1, 0.1);
-            net->initWeights(weights);
+            net->initWeights(NULL);
         }
         else
         {

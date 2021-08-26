@@ -68,69 +68,26 @@ LayerPool::~LayerPool()
 /* forward propagation */
 void LayerPool::cpu_forward(int realBatchSize, bool train)
 {
-    clear(forwardTensor_->size(), forwardTensor_->getCpuPtr());
+    clear(forwardTensor_);
 
-    for (int n = 0; n < realBatchSize; n++)
+    if (pool_type_ == "max")
     {
-        for (int c = 0; c < c_; c++)
-        {
-            for (int h = 0; h < h_; h++)
-            {
-                for (int w = 0; w < w_; w++)
-                {
-                    if (pool_type_ == "max")
-                    {
-                        int start_h = h * stride_h_ - padding_h_;
-                        int start_w = w * stride_w_ - padding_w_;
-                        int end_h = start_h + filter_h_;
-                        int end_w = start_w + filter_w_;
-
-                        float max = -FLT_MAX;
-                        int max_i = -1;
-                        for (int cur_h = start_h; cur_h < end_h; cur_h++)
-                        {
-                            for (int cur_w = start_w; cur_w < end_w; cur_w++)
-                            {
-                                if (cur_h < 0 || cur_w < 0 || cur_h > prev_layer_->h_-1 || cur_w > prev_layer_->w_-1)
-                                {
-                                }
-                                else if (prev_layer_->forwardTensor_->data(n, c, cur_h, cur_w) > max)
-                                {
-                                    max = prev_layer_->forwardTensor_->data(n, c, cur_h, cur_w);
-                                    max_i = ((n*prev_layer_->c_ + c)*prev_layer_->h_ + cur_h)*prev_layer_->w_ + cur_w;
-                                }
-                            }
-                        }
-                        forwardTensor_->data(n, c, h, w) = max;
-                        indexTensor_->data(n, c, h, w) = max_i;
-                    }
-                    else
-                    {
-                        Assert(false, "Unrecognized pooling function.");
-                    }
-                }
-            }
-        }
+        maxpool(prev_layer_->forwardTensor_, forwardTensor_, indexTensor_, stride_h_, stride_w_, filter_h_, filter_w_, padding_h_, padding_w_);
+    }
+    else
+    {
+        Assert(false, "Unrecognized pooling function.");
     }
 }
 
 /* backward propagation */
 void LayerPool::cpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
-
-    clear(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getCpuPtr());
+    clear(prev_layer_->backwardTensor_);
 
     if (pool_type_ == "max")
     {
-        for (int i = 0; i < realBatchSize*sample_size_; ++i)
-        {
-            int index = indexTensor_->data(i);
-            prev_layer_->backwardTensor_->data(index) += backwardTensor_->data(i);
-        }
+        backward_maxpool(backwardTensor_, prev_layer_->backwardTensor_, indexTensor_);
     }
     else
     {
@@ -147,13 +104,11 @@ void LayerPool::cpu_update(int realBatchSize, float lr)
 /* forward propagation */
 void LayerPool::gpu_forward(int realBatchSize, bool train)
 {
-    clear_gpu(forwardTensor_->size(), forwardTensor_->getGpuPtr());
+    clear_gpu(forwardTensor_);
 
     if (pool_type_ == "max")
     {
-        maxpool_gpu(prev_layer_->forwardTensor_->getGpuPtr(), forwardTensor_->getGpuPtr(), indexTensor_->getGpuPtr(),
-            prev_layer_->h_, prev_layer_->w_, prev_layer_->c_, h_, w_,
-            stride_h_, stride_w_, filter_h_, filter_w_, padding_h_, padding_w_, realBatchSize);
+        maxpool_gpu(prev_layer_->forwardTensor_, forwardTensor_, indexTensor_, stride_h_, stride_w_, filter_h_, filter_w_, padding_h_, padding_w_);
     }
     else
     {
@@ -164,18 +119,11 @@ void LayerPool::gpu_forward(int realBatchSize, bool train)
 /* backward propagation */
 void LayerPool::gpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
-
-    clear_gpu(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getGpuPtr());
+    clear_gpu(prev_layer_->backwardTensor_);
 
     if (pool_type_ == "max")
     {
-        backward_maxpool_gpu(backwardTensor_->getGpuPtr(), prev_layer_->backwardTensor_->getGpuPtr(), indexTensor_->getGpuPtr(),
-            prev_layer_->h_, prev_layer_->w_, prev_layer_->c_, h_, w_,
-            stride_h_, stride_w_, filter_h_, filter_w_, padding_h_, padding_w_, realBatchSize);
+        backward_maxpool_gpu(backwardTensor_, prev_layer_->backwardTensor_, indexTensor_, stride_h_, stride_w_, filter_h_, filter_w_, padding_h_, padding_w_);
     }
     else
     {

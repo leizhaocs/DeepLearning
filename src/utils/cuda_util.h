@@ -23,38 +23,7 @@
 
 #include "includes.h"
 
-/* dropout */
-void dropout_gpu(float *input, float *output, int n, int batch, float *rand, float rate);
-
-/* backward of dropout */
-void backward_dropout_gpu(float *backward_input, float *backward_output, float *rand, float rate, int n, int batch);
-
-/* max pooling */
-void maxpool_gpu(float *input, float *output, int *index, int in_h, int in_w, int in_c, int out_h, int out_w,
-    int stride_h, int stride_w, int filter_h, int filter_w, int padding_h, int padding_w, int batch);
-
-/* backward of maxpool */
-void backward_maxpool_gpu(float *backward_input, float *backward_output, int *index, int in_h, int in_w, int in_c, int out_h, int out_w,
-    int stride_h, int stride_w, int filter_h, int filter_w, int padding_h, int padding_w, int batch);
-
-/* relu */
-void relu_gpu(float *input, float *output, int n);
-
-/* backward of relu */
-void backward_relu_gpu(float *backward_input, float *forward_output, float *backward_output, int n);
-
-/* sigmoid */
-void sigmoid_gpu(float *input, float *output, int n);
-
-/* backward of sigmoid */
-void backward_sigmoid_gpu(float *backward_input, float *forward_output, float *backward_output, int n);
-
-/* softmax */
-void softmax_gpu(float *input, float *output, int n, int batch);
-
-/* backward of softmax */
-void backward_softmax_gpu(float *backward_input, float *forward_output, float *backward_output, int n, int batch);
-
+#if GPU == 1
 /* grid size */
 dim3 cuda_gridsize(int n);
 
@@ -66,5 +35,6 @@ void check_cublas_error(cublasStatus_t status);
 
 /* get blas handle */
 cublasHandle_t blas_handle();
+#endif
 
 #endif

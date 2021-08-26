@@ -22,431 +22,261 @@
 
 /* constructor */
 LayerBN::LayerBN(Params *params, Layer *prev_layer)
-{/*
+{
     prev_layer_ = prev_layer;
 
-    type_ = "batchnormalization";
+    type_ = "batchnorm";
 
-    Assert(params->hasField("channels"), "Batch Normalization Layer must have channels specified.");
-    channels_ = params->getScalari("channels");
+    n_ = prev_layer_->n_;
+    c_ = prev_layer_->c_;
+    h_ = prev_layer_->h_;
+    w_ = prev_layer_->w_;
+    sample_size_ = c_ * h_ * w_;
 
-    shape_ = prev_layer->shape_;
+    forwardTensor_ = new Tensor<float>(n_, c_, h_, w_);
+    backwardTensor_ = new Tensor<float>(n_, c_, h_, w_);
 
-    forwardTensor_ = new Tensor(shape_);
-    backwardTensor_ = new Tensor(shape_);
+    beta_ = new Tensor<float>(1, c_, 1, 1);
+    gamma_ = new Tensor<float>(1, c_, 1, 1);
 
-    std::vector<int> bn_shape = std::vector<int> {channels_};
-    mean_ = new Tensor(bn_shape);
-    std_ = new Tensor(bn_shape);
-    beta_ = new Tensor(bn_shape);
-    gamma_ = new Tensor(bn_shape);
-    running_mean_ = new Tensor(bn_shape);
-    running_std_ = new Tensor(bn_shape);
-    grad_beta_ = new Tensor(bn_shape);
-    grad_gamma_ = new Tensor(bn_shape);*/
+    grad_beta_ = new Tensor<float>(1, c_, 1, 1);
+    grad_gamma_ = new Tensor<float>(1, c_, 1, 1);
+
+    mean_ = new Tensor<float>(1, c_, 1, 1);
+    var_ = new Tensor<float>(1, c_, 1, 1);
+
+    running_mean_ = new Tensor<float>(1, c_, 1, 1);
+    running_var_ = new Tensor<float>(1, c_, 1, 1);
+
+    xhat_ = new Tensor<float>(n_, c_, h_, w_);
+    grad_xhat_ = new Tensor<float>(n_, c_, h_, w_);
+
+    temp1_ = new Tensor<float>(1, c_, 1, 1);
+    temp2_ = new Tensor<float>(1, c_, 1, 1);
 }
 
 /* destructor */
 LayerBN::~LayerBN()
-{/*
+{
     delete forwardTensor_;
     delete backwardTensor_;
-    delete mean_;
-    delete std_;
     delete beta_;
     delete gamma_;
-    delete running_mean_;
-    delete running_std_;
     delete grad_beta_;
-    delete grad_gamma_;*/
+    delete grad_gamma_;
+    delete mean_;
+    delete var_;
+    delete running_mean_;
+    delete running_var_;
+    delete xhat_;
+    delete grad_xhat_;
+    delete temp1_;
+    delete temp2_;
 }
 
 /* forward propagation */
 void LayerBN::cpu_forward(int realBatchSize, bool train)
-{/*
-    if (!train)
+{
+    clear(forwardTensor_);
+
+    if (train)
     {
-        if (shape_.size() == 2)
-        {
-            #pragma omp parallel for num_threads(OPENMP_THREADS)
-            for (int n = 0; n < realBatchSize; n++)
-            {
-                for (int l = 0; l < shape_[1]; l++)
-                {
-                    forwardTensor_->data(n, l) = prev_layer_->forwardTensor_->data(n, l);
-                    forwardTensor_->data(n, l) -= running_mean_->data(l);
-                    forwardTensor_->data(n, l) /= running_std_->data(l);
-                    forwardTensor_->data(n, l) *= gamma_->data(l);
-                    forwardTensor_->data(n, l) += beta_->data(l);
-                }
-            }
-        }
-        else if (shape_.size() == 4)
-        {
-            #pragma omp parallel for num_threads(OPENMP_THREADS)
-            for (int n = 0; n < realBatchSize; n++)
-            {
-                for (int h = 0; h < shape_[1]; h++)
-                {
-                    for (int w = 0; w < shape_[2]; w++)
-                    {
-                        for (int c = 0; c < shape_[3]; c++)
-                        {
-                            forwardTensor_->data(n, h, w, c) = prev_layer_->forwardTensor_->data(n, h, w, c);
-                            forwardTensor_->data(n, h, w, c) -= running_mean_->data(c);
-                            forwardTensor_->data(n, h, w, c) /= running_std_->data(c);
-                            forwardTensor_->data(n, h, w, c) *= gamma_->data(c);
-                            forwardTensor_->data(n, h, w, c) += beta_->data(c);
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            Assert(false, "Wrong size in Batch Normalization.");
-        }
+        mean_keep_channel(mean_, prev_layer_->forwardTensor_);
+        variance_keep_channel(var_, prev_layer_->forwardTensor_, mean_);
+        normalize_expand_channel(xhat_, prev_layer_->forwardTensor_, mean_, var_);
+        scale_shift_expand_channel(forwardTensor_, xhat_, gamma_, beta_);
+
+        add_with_momentum(running_mean_, mean_, 0.99);
+        add_with_momentum(running_var_, var_, 0.99);
     }
     else
     {
-        if (shape_.size() == 2)
-        {
-            #pragma omp parallel for num_threads(OPENMP_THREADS)
-            for (int l = 0; l < shape_[1]; l++)
-            {
-                mean_->data(l) = 0;
-                for (int n = 0; n < realBatchSize; n++)
-                {
-                    mean_->data(l) += prev_layer_->forwardTensor_->data(n, l);
-                }
-                mean_->data(l) /= realBatchSize;
-
-                std_->data(l) = 0;
-                for (int n = 0; n < realBatchSize; n++)
-                {
-                    std_->data(l) += (prev_layer_->forwardTensor_->data(n, l)-mean_->data(l)) * (prev_layer_->forwardTensor_->data(n, l)-mean_->data(l));
-                }
-                std_->data(l) /= realBatchSize;
-
-                for (int n = 0; n < realBatchSize; n++)
-                {
-                    forwardTensor_->data(n, l) = prev_layer_->forwardTensor_->data(n, l) - mean_->data(l);
-                    forwardTensor_->data(n, l) /= sqrt((double)(std_->data(l)*std_->data(l) + EPSILON));
-                    forwardTensor_->data(n, l) = forwardTensor_->data(n, l)*gamma_->data(l) + beta_->data(l);
-                }
-            }
-        }
-        else if (shape_.size() == 4)
-        {
-            #pragma omp parallel for num_threads(OPENMP_THREADS)
-            for (int c = 0; c < shape_[3]; c++)
-            {
-                mean_->data(c) = 0;
-                for (int h = 0; h < shape_[1]; h++)
-                {
-                    for (int w = 0; w < shape_[2]; w++)
-                    {
-                        for (int n = 0; n < realBatchSize; n++)
-                        {
-                            mean_->data(c) += prev_layer_->forwardTensor_->data(n, h, w, c);
-                        }
-                    }
-                }
-                mean_->data(c) /= realBatchSize * shape_[1] * shape_[2];
-
-                std_->data(c) = 0;
-                for (int h = 0; h < shape_[1]; h++)
-                {
-                    for (int w = 0; w < shape_[2]; w++)
-                    {
-                        for (int n = 0; n < realBatchSize; n++)
-                        {
-                            std_->data(c) += (prev_layer_->forwardTensor_->data(n, h, w, c)-mean_->data(c)) * (prev_layer_->forwardTensor_->data(n, h, w, c)-mean_->data(c));
-                        }
-                    }
-                }
-                std_->data(c) /= realBatchSize * shape_[1] * shape_[2];
-
-                for (int h = 0; h < shape_[1]; h++)
-                {
-                    for (int w = 0; w < shape_[2]; w++)
-                    {
-                        for (int n = 0; n < realBatchSize; n++)
-                        {
-                            forwardTensor_->data(n, h, w, c) = prev_layer_->forwardTensor_->data(n, h, w, c) - mean_->data(c);
-                            forwardTensor_->data(n, h, w, c) /= sqrt((double)(std_->data(c)*std_->data(c) + EPSILON));
-                            forwardTensor_->data(n, h, w, c) = forwardTensor_->data(n, h, w, c)*gamma_->data(c) + beta_->data(c);
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            Assert(false, "Wrong size in Batch Normalization.");
-        }
-    }*/
+        normalize_expand_channel(xhat_, prev_layer_->forwardTensor_, running_mean_, running_var_);
+        scale_shift_expand_channel(forwardTensor_, xhat_, gamma_, beta_);
+    }
 }
 
 /* backward propagation */
 void LayerBN::cpu_backward(int realBatchSize)
-{/*
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
+{
+    clear(prev_layer_->backwardTensor_);
+    clear(grad_beta_);
+    clear(grad_gamma_);
 
-    if (shape_.size() == 2)
-    {
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int n = 0; n < realBatchSize; n++)
-        {
-            for (int l = 0; l < shape_[1]; l++)
-            {
-                prev_layer_->backwardTensor_->data(n, l) = 0;
-                for (int i = 0; i < realBatchSize; i++)
-                {
-                    prev_layer_->backwardTensor_->data(n, l) += backwardTensor_->data(i, l) * (forwardTensor_->data(i, l) - mean_->data(l));
-                }
-                prev_layer_->backwardTensor_->data(n, l) *= (mean_->data(l) - forwardTensor_->data(n, l)) / (std_->data(l) + EPSILON);
-                for (int i = 0; i < realBatchSize; i++)
-                {
-                    prev_layer_->backwardTensor_->data(n, l) -= backwardTensor_->data(i, l);
-                }
-                prev_layer_->backwardTensor_->data(n, l) += realBatchSize * backwardTensor_->data(n, l);
-                prev_layer_->backwardTensor_->data(n, l) *= gamma_->data(l) / sqrt((double)(std_->data(l)+EPSILON)) / realBatchSize;
-            }
-        }
-    }
-    else if (shape_.size() == 4)
-    {
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int n = 0; n < realBatchSize; n++)
-        {
-            for (int h = 0; h < shape_[1]; h++)
-            {
-                for (int w = 0; w < shape_[2]; w++)
-                {
-                    for (int c = 0; c < shape_[3]; c++)
-                    {
-                        prev_layer_->backwardTensor_->data(n, h, w, c) = 0;
-                        for (int i = 0; i < realBatchSize; i++)
-                        {
-                            for (int j = 0; j < shape_[1]; j++)
-                            {
-                                for (int k = 0; k < shape_[2]; k++)
-                                {
-                                    prev_layer_->backwardTensor_->data(n, h, w, c) += backwardTensor_->data(i, j, k, c) * (forwardTensor_->data(i, j, k, c) - mean_->data(c));
-                                }
-                            }
-                        }
-                        prev_layer_->backwardTensor_->data(n, h, w, c) *= (mean_->data(c) - forwardTensor_->data(n, h, w, c)) / (std_->data(c) + EPSILON);
-                        for (int i = 0; i < realBatchSize; i++)
-                        {
-                            for (int j = 0; j < shape_[1]; j++)
-                            {
-                                for (int k = 0; k < shape_[2]; k++)
-                                {
-                                    prev_layer_->backwardTensor_->data(n, h, w, c) -= backwardTensor_->data(i, j, k, c);
-                                }
-                            }
-                        }
-                        prev_layer_->backwardTensor_->data(n, h, w, c) += realBatchSize * shape_[1] * shape_[2] * backwardTensor_->data(n, h, w, c);
-                        prev_layer_->backwardTensor_->data(n, h, w, c) *= gamma_->data(c) / sqrt((double)(std_->data(c)+EPSILON)) / (realBatchSize * shape_[1] * shape_[2]);
-                    }
-                }
-            }
-        }
-    }
-    else
-    {
-        Assert(false, "Wrong size in Batch Normalization.");
-    }*/
+    mult_expand_channel(grad_xhat_, backwardTensor_, gamma_);
+    backward_batchnorm(prev_layer_->backwardTensor_, grad_xhat_, xhat_, var_, temp1_, temp2_);
+
+    sum_keep_channel(grad_beta_, backwardTensor_);
+    product_sum_keep_channel(grad_gamma_, backwardTensor_, xhat_);
 }
-
-/* calculate gradients */
-//void LayerBN::cpu_calGrads(int realBatchSize)
-//{
-/*
-    if (shape_.size() == 2)
-    {
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int l = 0; l < shape_[1]; l++)
-        {
-            grad_beta_->data(l) = 0;
-            for (int n = 0; n < realBatchSize; n++)
-            {
-                grad_beta_->data(l) += backwardTensor_->data(n, l);
-            }
-            grad_beta_->data(l) /= realBatchSize;
-        }
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int l = 0; l < shape_[1]; l++)
-        {
-            grad_gamma_->data(l) = 0;
-            for (int n = 0; n < realBatchSize; n++)
-            {
-                grad_gamma_->data(l) += backwardTensor_->data(n, l) * (forwardTensor_->data(n, l)-mean_->data(l)) / sqrt((double)(std_->data(l)+EPSILON));
-            }
-            grad_gamma_->data(l) /= realBatchSize;
-        }
-    }
-    else if (shape_.size() == 4)
-    {
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int c = 0; c < shape_[3]; c++)
-        {
-            grad_beta_->data(c) = 0;
-            for (int i = 0; i < realBatchSize; i++)
-            {
-                for (int j = 0; j < shape_[1]; j++)
-                {
-                    for (int k = 0; k < shape_[2]; k++)
-                    {
-                        grad_beta_->data(c) += backwardTensor_->data(i, j, k, c);
-                    }
-                }
-            }
-            grad_beta_->data(c) /= realBatchSize * shape_[1] * shape_[2];
-        }
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int c = 0; c < shape_[3]; c++)
-        {
-            grad_gamma_->data(c) = 0;
-            for (int i = 0; i < realBatchSize; i++)
-            {
-                for (int j = 0; j < shape_[1]; j++)
-                {
-                    for (int k = 0; k < shape_[2]; k++)
-                    {
-                        grad_gamma_->data(c) += backwardTensor_->data(i, j, k, c) * (forwardTensor_->data(i, j, k, c)-mean_->data(c)) / sqrt((double)(std_->data(c)+EPSILON));
-                    }
-                }
-            }
-            grad_gamma_->data(c) /= realBatchSize * shape_[1] * shape_[2];
-        }
-    }
-    else
-    {
-        Assert(false, "Wrong size in Batch Normalization.");
-    }*/
-//}
 
 /* update weights and biases */
 void LayerBN::cpu_update(int realBatchSize, float lr)
-{/*
-    if (shape_.size() == 2)
-    {
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int l = 0; l < shape_[1]; l++)
-        {
-            beta_->data(l) -= lr * grad_beta_->data(l);
-        }
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int l = 0; l < shape_[1]; l++)
-        {
-            gamma_->data(l) -= lr * grad_gamma_->data(l);
-        }
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int l = 0; l < shape_[1]; l++)
-        {
-            running_mean_->data(l) = 0.9*running_mean_->data(l) + 0.1*mean_->data(l);
-        }
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int l = 0; l < shape_[1]; l++)
-        {
-            running_std_->data(l) = 0.9*running_std_->data(l) + 0.1*std_->data(l);
-        }
-    }
-    else if (shape_.size() == 4)
-    {
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int c = 0; c < shape_[3]; c++)
-        {
-            beta_->data(c) -= lr * grad_beta_->data(c);
-        }
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int c = 0; c < shape_[3]; c++)
-        {
-            gamma_->data(c) -= lr * grad_gamma_->data(c);
-        }
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int c = 0; c < shape_[3]; c++)
-        {
-            running_mean_->data(c) = 0.9*running_mean_->data(c) + 0.1*mean_->data(c);
-        }
-        #pragma omp parallel for num_threads(OPENMP_THREADS)
-        for (int c = 0; c < shape_[3]; c++)
-        {
-            running_std_->data(c) = 0.9*running_std_->data(c) + 0.1*std_->data(c);
-        }
-    }
-    else
-    {
-        Assert(false, "Wrong size in Batch Normalization.");
-    }*/
+{
+    float step = -lr/realBatchSize;
+    axpy(beta_, grad_beta_, step);
+    axpy(gamma_, grad_gamma_, step);
 }
 
 #if GPU == 1
 /* forward propagation */
 void LayerBN::gpu_forward(int realBatchSize, bool train)
 {
+    clear_gpu(forwardTensor_);
+
+    if (train)
+    {
+        mean_keep_channel_gpu(mean_, prev_layer_->forwardTensor_);
+        variance_keep_channel_gpu(var_, prev_layer_->forwardTensor_, mean_);
+        normalize_expand_channel_gpu(xhat_, prev_layer_->forwardTensor_, mean_, var_);
+        scale_shift_expand_channel_gpu(forwardTensor_, xhat_, gamma_, beta_);
+
+        add_with_momentum_gpu(running_mean_, mean_, 0.99);
+        add_with_momentum_gpu(running_var_, var_, 0.99);
+    }
+    else
+    {
+        normalize_expand_channel_gpu(xhat_, prev_layer_->forwardTensor_, running_mean_, running_var_);
+        scale_shift_expand_channel_gpu(forwardTensor_, xhat_, gamma_, beta_);
+    }
 }
 
 /* backward propagation */
 void LayerBN::gpu_backward(int realBatchSize)
 {
+    clear_gpu(prev_layer_->backwardTensor_);
+    clear_gpu(grad_beta_);
+    clear_gpu(grad_gamma_);
+
+    mult_expand_channel_gpu(grad_xhat_, backwardTensor_, gamma_);
+    backward_batchnorm_gpu(prev_layer_->backwardTensor_, grad_xhat_, xhat_, var_, temp1_, temp2_);
+
+    sum_keep_channel_gpu(grad_beta_, backwardTensor_);
+    product_sum_keep_channel_gpu(grad_gamma_, backwardTensor_, xhat_);
 }
 
 /* update weights and biases */
 void LayerBN::gpu_update(int realBatchSize, float lr)
 {
+    float step = -lr/realBatchSize;
+    axpy_gpu(beta_, grad_beta_, step);
+    axpy_gpu(gamma_, grad_gamma_, step);
 }
 #endif
 
 /* initialize weights */
 void LayerBN::initWeights(float *weights, int &offset)
-{/*
-    running_mean_->copyIn(weights+offset, running_mean_->size());
-    offset += running_mean_->size();
+{
+    if (weights == NULL)
+    {
+        for (int i = 0; i < beta_->total_size(); i++)
+        {
+            beta_->data(i) = 0;
+        }
 
-    running_std_->copyIn(weights+offset, running_std_->size());
-    offset += running_std_->size();
+        for (int i = 0; i < gamma_->total_size(); i++)
+        {
+            gamma_->data(i) = 1;
+        }
 
-    beta_->copyIn(weights+offset, beta_->size());
-    offset += beta_->size();
+        for (int i = 0; i < running_mean_->total_size(); i++)
+        {
+            running_mean_->data(i) = 0;
+        }
 
-    gamma_->copyIn(weights+offset, gamma_->size());
-    offset += gamma_->size();*/
+        for (int i = 0; i < running_var_->total_size(); i++)
+        {
+            running_var_->data(i) = 1;
+        }
+    }
+    else
+    {
+        for (int i = 0; i < beta_->total_size(); i++)
+        {
+            beta_->data(i) = weights[offset+i];
+        }
+        offset += beta_->total_size();
+
+        for (int i = 0; i < gamma_->total_size(); i++)
+        {
+            gamma_->data(i) = weights[offset+i];
+        }
+        offset += gamma_->total_size();
+
+        for (int i = 0; i < running_mean_->total_size(); i++)
+        {
+            running_mean_->data(i) = weights[offset+i];
+        }
+        offset += running_mean_->total_size();
+
+        for (int i = 0; i < running_var_->total_size(); i++)
+        {
+            running_var_->data(i) = weights[offset+i];
+        }
+        offset += running_var_->total_size();
+    }
+
+#if GPU == 1
+    if (use_gpu)
+    {
+        beta_->toGpu();
+        gamma_->toGpu();
+        running_mean_->toGpu();
+        running_var_->toGpu();
+    }
+#endif
 }
 
 /* get weights */
 void LayerBN::getWeights(float *weights, int &offset)
-{/*
-    running_mean_->copyOut(weights+offset, running_mean_->size());
-    offset += running_mean_->size();
+{
+#if GPU == 1
+    if (use_gpu)
+    {
+        beta_->toCpu();
+        gamma_->toCpu();
+        running_mean_->toCpu();
+        running_var_->toCpu();
+    }
+#endif
 
-    running_std_->copyOut(weights+offset, running_std_->size());
-    offset += running_std_->size();
+    for (int i = 0; i < beta_->total_size(); i++)
+    {
+       weights[offset+i] = beta_->data(i);
+    }
+    offset += beta_->total_size();
 
-    beta_->copyOut(weights+offset, beta_->size());
-    offset += beta_->size();
+    for (int i = 0; i < gamma_->total_size(); i++)
+    {
+       weights[offset+i] = gamma_->data(i);
+    }
+    offset += gamma_->total_size();
 
-    gamma_->copyOut(weights+offset, gamma_->size());
-    offset += gamma_->size();*/
+    for (int i = 0; i < running_mean_->total_size(); i++)
+    {
+       weights[offset+i] = running_mean_->data(i);
+    }
+    offset += running_mean_->total_size();
+
+    for (int i = 0; i < running_var_->total_size(); i++)
+    {
+       weights[offset+i] = running_var_->data(i);
+    }
+    offset += running_var_->total_size();
 }
 
 /* get number of weights in this layer */
 std::vector<int> LayerBN::getNumWeights()
-{/*
-    int total = running_mean_->size() + running_std_->size() + beta_->size() + gamma_->size();
-    std::vector<int> num_weights;
-    num_weights.push_back(total);
-    num_weights.push_back(running_mean_->size());
-    num_weights.push_back(running_std_->size());
-    num_weights.push_back(beta_->size());
-    num_weights.push_back(gamma_->size());
-    return num_weights;*/
-    std::vector<int> num_weights;
+{
+    int nb = beta_->total_size();
+    int ng = gamma_->total_size();
+    int nm = running_mean_->total_size();
+    int nv = running_var_->total_size();
+    vector<int> num_weights;
+    num_weights.push_back(nb+ng+nm+nv);
+    num_weights.push_back(nb);
+    num_weights.push_back(ng);
+    num_weights.push_back(nm);
+    num_weights.push_back(nv);
     return num_weights;
 }

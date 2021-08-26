@@ -73,7 +73,7 @@ LayerConv::~LayerConv()
 /* forward propagation */
 void LayerConv::cpu_forward(int realBatchSize, bool train)
 {
-    clear(forwardTensor_->size(), forwardTensor_->getCpuPtr());
+    clear(forwardTensor_);
 
     int m = num_filters_;
     int n = h_ * w_;
@@ -92,20 +92,15 @@ void LayerConv::cpu_forward(int realBatchSize, bool train)
         gemm(0, 0, m, n, k, a, k, b, n, c, n);
     }
     delete atensor;
-    add_bias(forwardTensor_->getCpuPtr(), biases_->getCpuPtr(), realBatchSize, num_filters_, h_*w_);
+    add_expand_channel(forwardTensor_, biases_);
 }
 
 /* backward propagation */
 void LayerConv::cpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
-
-    clear(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getCpuPtr());
-    clear(grad_filters_->size(), grad_filters_->getCpuPtr());
-    clear(grad_biases_->size(), grad_biases_->getCpuPtr());
+    clear(prev_layer_->backwardTensor_);
+    clear(grad_filters_);
+    clear(grad_biases_);
 
     int m = num_filters_;
     int n = filter_h_ * filter_w_ * prev_layer_->c_;
@@ -114,7 +109,7 @@ void LayerConv::cpu_backward(int realBatchSize)
     Tensor<float> *atensor = new Tensor<float>(n, 1, 1, k);
     for (int i = 0; i < realBatchSize; i++)
     {
-        clear(atensor->size(), atensor->getCpuPtr());
+        clear(atensor);
 
         float *a = backwardTensor_->getCpuPtr() + i*sample_size_;
         float *b = atensor->getCpuPtr();
@@ -125,7 +120,7 @@ void LayerConv::cpu_backward(int realBatchSize)
                    filter_h_, filter_w_, stride_h_, stride_w_, padding_h_, padding_w_, b);
         gemm(0, 1, m, n, k, a, k, b, k, c, n);
 
-        clear(atensor->size(), atensor->getCpuPtr());
+        clear(atensor);
 
         a = filters_->getCpuPtr();
         b = backwardTensor_->getCpuPtr() + i*sample_size_;
@@ -137,22 +132,22 @@ void LayerConv::cpu_backward(int realBatchSize)
                    filter_h_, filter_w_, stride_h_, stride_w_, padding_h_, padding_w_, imd);
     }
     delete atensor;
-    backward_bias(grad_biases_->getCpuPtr(), backwardTensor_->getCpuPtr(), realBatchSize, num_filters_, k);
+    backward_bias(grad_biases_, backwardTensor_);
 }
 
 /* update weights and biases */
 void LayerConv::cpu_update(int realBatchSize, float lr)
 {
     float step = -lr/realBatchSize;
-    axpy(filters_->size(), step, grad_filters_->getCpuPtr(), filters_->getCpuPtr());
-    axpy(biases_->size(), step, grad_biases_->getCpuPtr(), biases_->getCpuPtr());
+    axpy(filters_, grad_filters_, step);
+    axpy(biases_, grad_biases_, step);
 }
 
 #if GPU == 1
 /* forward propagation */
 void LayerConv::gpu_forward(int realBatchSize, bool train)
 {
-    clear_gpu(forwardTensor_->size(), forwardTensor_->getGpuPtr());
+    clear_gpu(forwardTensor_);
 
     int m = num_filters_;
     int n = h_ * w_;
@@ -161,7 +156,7 @@ void LayerConv::gpu_forward(int realBatchSize, bool train)
     Tensor<float> *atensor = new Tensor<float>(n, 1, 1, k);
     for (int i = 0; i < realBatchSize; i++)
     {
-        float *a = filters_->getGpuPtr();;
+        float *a = filters_->getGpuPtr();
         float *b = atensor->getGpuPtr();
         float *c = forwardTensor_->getGpuPtr() + i*sample_size_;
 
@@ -171,20 +166,15 @@ void LayerConv::gpu_forward(int realBatchSize, bool train)
         gemm_gpu(0, 0, m, n, k, a, k, b, n, c, n);
     }
     delete atensor;
-    add_bias_gpu(forwardTensor_->getGpuPtr(), biases_->getGpuPtr(), realBatchSize, num_filters_, h_*w_);
+    add_expand_channel_gpu(forwardTensor_, biases_);
 }
 
 /* backward propagation */
 void LayerConv::gpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
-
-    clear_gpu(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getGpuPtr());
-    clear_gpu(grad_filters_->size(), grad_filters_->getGpuPtr());
-    clear_gpu(grad_biases_->size(), grad_biases_->getGpuPtr());
+    clear_gpu(prev_layer_->backwardTensor_);
+    clear_gpu(grad_filters_);
+    clear_gpu(grad_biases_);
 
     int m = num_filters_;
     int n = filter_h_ * filter_w_ * prev_layer_->c_;
@@ -193,7 +183,7 @@ void LayerConv::gpu_backward(int realBatchSize)
     Tensor<float> *atensor = new Tensor<float>(1, 1, k, n);
     for (int i = 0; i < realBatchSize; i++)
     {
-        clear_gpu(atensor->size(), atensor->getGpuPtr());
+        clear_gpu(atensor);
 
         float *a = backwardTensor_->getGpuPtr() + i*sample_size_;
         float *b = atensor->getGpuPtr();
@@ -204,7 +194,7 @@ void LayerConv::gpu_backward(int realBatchSize)
                    filter_h_, filter_w_, stride_h_, stride_w_, padding_h_, padding_w_, b);
         gemm_gpu(0, 1, m, n, k, a, k, b, k, c, n);
 
-        clear_gpu(atensor->size(), atensor->getGpuPtr());
+        clear_gpu(atensor);
 
         a = filters_->getGpuPtr();
         b = backwardTensor_->getGpuPtr() + i*sample_size_;
@@ -216,32 +206,56 @@ void LayerConv::gpu_backward(int realBatchSize)
                    filter_h_, filter_w_, stride_h_, stride_w_, padding_h_, padding_w_, imd);
     }
     delete atensor;
-    backward_bias_gpu(grad_biases_->getGpuPtr(), backwardTensor_->getGpuPtr(), realBatchSize, num_filters_, k);
+    backward_bias_gpu(grad_biases_, backwardTensor_);
 }
 
 /* update weights and biases */
 void LayerConv::gpu_update(int realBatchSize, float lr)
 {
     float step = -lr/realBatchSize;
-    axpy_gpu(filters_->size(), step, grad_filters_->getGpuPtr(), filters_->getGpuPtr());
-    axpy_gpu(biases_->size(), step, grad_biases_->getGpuPtr(), biases_->getGpuPtr());
+
+    axpy_gpu(filters_, grad_filters_, step);
+    axpy_gpu(biases_, grad_biases_, step);
 }
 #endif
 
 /* initialize weights */
 void LayerConv::initWeights(float *weights, int &offset)
 {
-    for (int i = 0; i < filters_->size(); i++)
+    if (weights == NULL)
     {
-       filters_->data(i) = weights[offset+i];
-    }
-    offset += filters_->size();
+        int fan_in = prev_layer_->c_ * filter_h_ * filter_w_;
+        float bound_filters = sqrt(6.0 / fan_in);
+        float bound_biases = sqrt(1.0 / fan_in);
 
-    for (int i = 0; i < biases_->size(); i++)
-    {
-       biases_->data(i) = weights[offset+i];
+        default_random_engine generator;
+        uniform_real_distribution<float> distribution_filters(bound_filters*-1, bound_filters);
+        uniform_real_distribution<float> distribution_biases(bound_biases*-1, bound_biases);
+
+        for (int i = 0; i < filters_->total_size(); i++)
+        {
+            filters_->data(i) = distribution_filters(generator);
+        }
+
+        for (int i = 0; i < biases_->total_size(); i++)
+        {
+            biases_->data(i) = distribution_biases(generator);
+        }
     }
-    offset += biases_->size();
+    else
+    {
+        for (int i = 0; i < filters_->total_size(); i++)
+        {
+            filters_->data(i) = weights[offset+i];
+        }
+        offset += filters_->total_size();
+
+        for (int i = 0; i < biases_->total_size(); i++)
+        {
+            biases_->data(i) = weights[offset+i];
+        }
+        offset += biases_->total_size();
+    }
 
 #if GPU == 1
     if (use_gpu)
@@ -263,24 +277,24 @@ void LayerConv::getWeights(float *weights, int &offset)
     }
 #endif
 
-    for (int i = 0; i < filters_->size(); i++)
+    for (int i = 0; i < filters_->total_size(); i++)
     {
        weights[offset+i] = filters_->data(i);
     }
-    offset += filters_->size();
+    offset += filters_->total_size();
 
-    for (int i = 0; i < biases_->size(); i++)
+    for (int i = 0; i < biases_->total_size(); i++)
     {
        weights[offset+i] = biases_->data(i);
     }
-    offset += biases_->size();
+    offset += biases_->total_size();
 }
 
 /* get number of weights in this layer */
 vector<int> LayerConv::getNumWeights()
 {
-    int nf = filters_->size();
-    int nb = biases_->size();
+    int nf = filters_->total_size();
+    int nb = biases_->total_size();
     vector<int> num_weights;
     num_weights.push_back(nf+nb);
     num_weights.push_back(nf);

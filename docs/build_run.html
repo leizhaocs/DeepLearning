@@ -1,0 +1,93 @@
+<!DOCTYPE HTML>
+<!--
+	Editorial by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+	<head>
+		<title>Build & Run</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+	</head>
+	<body class="is-preload">
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Main -->
+					<div id="main">
+						<div class="inner">
+
+							<!-- Header -->
+								<header id="header">
+									<a href="index.html" class="logo"><strong>Lei Zhao</strong></a>
+								</header>
+
+							<!-- Content -->
+								<section>
+									<header class="main">
+										<h1>Build & Run</h1>
+									</header>
+
+<!-- ------------------------------------------------------------------------------------------------------ -->
+
+<h2 id="dnn-mode">Build</h2>
+
+<p>To build the framework, simply type <code>make</code> in the main folder.</p>
+
+<p>By default, the framework will be compiled with CUDA support. If you do not to compile with CUDA support or the system does not have a GPU, change the first line in the Makefile to</p>
+
+<pre><code><span class="hljs-attr">GPU</span>=<span class="hljs-number">0</span></code></pre>
+
+<h2 id="dnn-mode">Run</h2>
+
+<p>This framework supports two running modes: <em>dnn</em> and <em>drl</em>.</p>
+
+<h3 id="dnn-mode">dnn mode</h3>
+
+<p>dnn mode is for conventional CNN training and testing. The command line for training is as following:</p>
+
+<pre><code>./learning dnn train &lt;dataset name&gt; &lt;network cfg <span class="hljs-built_in">file</span>&gt; &lt;<span class="hljs-built_in">load</span> weights <span class="hljs-built_in">file</span>[<span class="hljs-literal">null</span>]&gt; &lt;save weights <span class="hljs-built_in">file</span>[<span class="hljs-literal">null</span>]&gt; [-cpu]</code></pre>
+
+<p>The command line for testing is as following:</p>
+
+<pre><code>./learning dnn test  &lt;dataset <span class="hljs-built_in">name</span>&gt; &lt;network cfg <span class="hljs-built_in">file</span>&gt; &lt;load weights <span class="hljs-built_in">file</span>&gt; [-cpu]</code></pre>
+
+<p>If <code>&lt;load weights file&gt;</code> is set to null, the network will randomly initialize the weights. If <code>&lt;save weights file&gt;</code> is set to null, the trained weights will not be saved. If <code>-cpu</code> is present, the framework will not use CUDA acceleration even if it is compiled with <code>GPU=1</code> in Makefile.</p>
+
+<p>An example of training MNIST with CUDA acceleration is as following:</p>
+
+<pre><code>.<span class="hljs-regexp">/learning dnn train mnist cfg/m</span>nist_cnn.cfg <span class="hljs-keyword">null</span> weights<span class="hljs-regexp">/mnist_cnn.weights</span></code></pre>
+
+<p>An example of test MNIST without CUDA acceleration is as following:</p>
+
+<pre><code>./learning dnn test mnist cfg/mnist_cnn<span class="hljs-selector-class">.cfg</span> weights/mnist_cnn<span class="hljs-selector-class">.weights</span> -cpu</code></pre>
+
+<h3 id="drl-mode">drl mode</h3>
+
+<p>drl mode is used for deep reinforcement learning. Currently, drl mode is under development. It is not fully functional yet.</p>
+
+<!-- ------------------------------------------------------------------------------------------------------ -->
+                                    
+								</section>
+
+						</div>
+					</div>
+
+                    <script src="sidebar.js"></script>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/browser.min.js"></script>
+			<script src="assets/js/breakpoints.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>

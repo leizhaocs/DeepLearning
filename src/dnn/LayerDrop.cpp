@@ -53,53 +53,25 @@ LayerDrop::~LayerDrop()
 /* forward propagation */
 void LayerDrop::cpu_forward(int realBatchSize, bool train)
 {
-    clear(forwardTensor_->size(), forwardTensor_->getCpuPtr());
+    clear(forwardTensor_);
 
     if (train)
     {
-        random(dropoutTensor_->size(), dropoutTensor_->getCpuPtr());
-        for (int i = 0; i < forwardTensor_->size(); i++)
-        {
-            if (dropoutTensor_->data(i) < rate_)
-            {
-                forwardTensor_->data(i) = 0;
-            }
-            else
-            {
-                forwardTensor_->data(i) = prev_layer_->forwardTensor_->data(i);
-            }
-        }
+        random(dropoutTensor_);
+        assign_cond(forwardTensor_, prev_layer_->forwardTensor_, dropoutTensor_, rate_);
     }
     else
     {
-        for (int i = 0; i < forwardTensor_->size(); i++)
-        {
-            forwardTensor_->data(i) = prev_layer_->forwardTensor_->data(i);
-        }
+        assign(forwardTensor_, prev_layer_->forwardTensor_);
     }
 }
 
 /* backward propagation */
 void LayerDrop::cpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
+    clear(prev_layer_->backwardTensor_);
 
-    clear(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getCpuPtr());
-
-    for (int i = 0; i < prev_layer_->backwardTensor_->size(); i++)
-    {
-        if (dropoutTensor_->data(i) < rate_)
-        {
-            prev_layer_->backwardTensor_->data(i) = 0;
-        }
-        else
-        {
-            prev_layer_->backwardTensor_->data(i) = backwardTensor_->data(i);
-        }
-    }
+    assign_cond(prev_layer_->backwardTensor_, backwardTensor_, dropoutTensor_, rate_);
 }
 
 /* update weights and biases */
@@ -111,33 +83,25 @@ void LayerDrop::cpu_update(int realBatchSize, float lr)
 /* forward propagation */
 void LayerDrop::gpu_forward(int realBatchSize, bool train)
 {
-    clear_gpu(forwardTensor_->size(), forwardTensor_->getGpuPtr());
+    clear_gpu(forwardTensor_);
 
     if (train)
     {
-        random_gpu(dropoutTensor_->size(), dropoutTensor_->getGpuPtr());
-        dropout_gpu(prev_layer_->forwardTensor_->getGpuPtr(), forwardTensor_->getGpuPtr(), sample_size_, realBatchSize,
-            dropoutTensor_->getGpuPtr(), rate_);
+        random_gpu(dropoutTensor_);
+        assign_cond_gpu(forwardTensor_, prev_layer_->forwardTensor_, dropoutTensor_, rate_);
     }
     else
     {
-        cudaMemcpy(forwardTensor_->getGpuPtr(), prev_layer_->forwardTensor_->getGpuPtr(),
-            forwardTensor_->size()*sizeof(float), cudaMemcpyDeviceToDevice);
+        assign_gpu(forwardTensor_, prev_layer_->forwardTensor_);
     }
 }
 
 /* backward propagation */
 void LayerDrop::gpu_backward(int realBatchSize)
 {
-    if (prev_layer_->type_ == "input")
-    {
-        return;
-    }
+    clear_gpu(prev_layer_->backwardTensor_);
 
-    clear_gpu(prev_layer_->backwardTensor_->size(), prev_layer_->backwardTensor_->getGpuPtr());
-
-    backward_dropout_gpu(backwardTensor_->getGpuPtr(), prev_layer_->backwardTensor_->getGpuPtr(), dropoutTensor_->getGpuPtr(),
-        rate_, sample_size_, realBatchSize);
+    assign_cond_gpu(prev_layer_->backwardTensor_, backwardTensor_, dropoutTensor_, rate_);
 }
 
 /* update weights and biases */

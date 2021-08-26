@@ -65,9 +65,10 @@ extern bool use_gpu;
 #define PORT 65432
 #define OPENMP_THREADS 8
 #define DIVUP(x, y) (((x) + (y) - 1) / (y))
-#define EPSILON 1e-4
+#define EPSILON 1e-5
 #if GPU == 1
-#define BLOCK 512
+#define BLOCK    512
+#define GRID(x)  ((x + BLOCK - 1) / BLOCK)
 #endif
 
 class MemoryMoniter;
@@ -101,20 +102,21 @@ inline void Assert(bool b, string msg)
     exit(1);
 }
 
-#if GPU == 1
 #include "utils/cuda_util.h"
-#endif
 #include "utils/args.h"
 #include "utils/config.h"
-#include "utils/gemm.h"
-#include "utils/blas.h"
-#include "utils/conv.h"
 #include "utils/gym.h"
-#include "utils/loss.h"
 #include "utils/MemoryMonitor.h"
 #include "utils/Tensor.h"
 #include "utils/Params.h"
 #include "utils/weights.h"
+#include "lib/gemm.h"
+#include "lib/compute.h"
+#include "lib/conv.h"
+#include "lib/bias.h"
+#include "lib/activation.h"
+#include "lib/pool.h"
+#include "lib/loss.h"
 #include "dnn/Layer.h"
 #include "dnn/LayerInput.h"
 #include "dnn/LayerAct.h"

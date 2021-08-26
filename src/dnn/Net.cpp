@@ -53,7 +53,7 @@ Net::Net(Params *layer_params, int layers_num, int batchSize, string loss_func)
         {
             layers_[i] = new LayerAct(layer_param, prev_layer);
         }
-        else if (layer_type == "batchnormalization")
+        else if (layer_type == "batchnorm")
         {
             layers_[i] = new LayerBN(layer_param, prev_layer);
         }
@@ -65,8 +65,7 @@ Net::Net(Params *layer_params, int layers_num, int batchSize, string loss_func)
         {
             Assert(false, layer_type + " - unknown type of the layer");
         }
-        printf("%s\n", layer_type.c_str());
-        printf("%d  %d  %d  %d\n", layers_[i]->n_, layers_[i]->c_, layers_[i]->h_, layers_[i]->w_);
+        printf("%15s (%d  %d  %d  %d)\n", layer_type.c_str(), layers_[i]->n_, layers_[i]->c_, layers_[i]->h_, layers_[i]->w_);
     }
 }
 
@@ -134,20 +133,20 @@ void Net::initForward(Tensor<float> *inputs, int inputs_offset, int forwardTenso
         int image_size = channels * height * width;
         float *inputs_start = inputs->getGpuPtr() + inputs_offset*image_size;
         float *forwardTensor_start = layers_[0]->forwardTensor_->getGpuPtr() + forwardTensor_offset*image_size;
-        copy_gpu(forwardTensor_start, inputs_start, realBatchSize*image_size);
+        cudaMemcpy(forwardTensor_start, inputs_start, realBatchSize*image_size*sizeof(float), cudaMemcpyDeviceToDevice);
     }
     else
     {
         int image_size = channels * height * width;
         float *inputs_start = inputs->getCpuPtr() + inputs_offset*image_size;
         float *forwardTensor_start = layers_[0]->forwardTensor_->getCpuPtr() + forwardTensor_offset*image_size;
-        copy(forwardTensor_start, inputs_start, realBatchSize*image_size);
+        memcpy(forwardTensor_start, inputs_start, realBatchSize*image_size*sizeof(float));
     }
 #else
     int image_size = channels * height * width;
     float *inputs_start = inputs->getCpuPtr() + inputs_offset*image_size;
     float *forwardTensor_start = layers_[0]->forwardTensor_->getCpuPtr() + forwardTensor_offset*image_size;
-    copy(forwardTensor_start, inputs_start, realBatchSize*image_size);
+    memcpy(forwardTensor_start, inputs_start, realBatchSize*image_size*sizeof(float));
 #endif
 }
 
@@ -179,11 +178,11 @@ void Net::loss(Tensor<float> *targets, int targets_offset, int realBatchSize, in
     {
         if (loss_.compare("cross_entropy") == 0)
         {
-            cross_entropy_gpu(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset, realBatchSize, classes);
+            cross_entropy_gpu(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
         }
         else if (loss_.compare("mse") == 0)
         {
-            mse_gpu(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset, realBatchSize, classes);
+            mse_gpu(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
         }
         else
         {
@@ -194,11 +193,11 @@ void Net::loss(Tensor<float> *targets, int targets_offset, int realBatchSize, in
     {
         if (loss_.compare("cross_entropy") == 0)
         {
-            cross_entropy(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset, realBatchSize, classes);
+            cross_entropy(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
         }
         else if (loss_.compare("mse") == 0)
         {
-            mse(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset, realBatchSize, classes);
+            mse(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
         }
         else
         {
@@ -208,11 +207,11 @@ void Net::loss(Tensor<float> *targets, int targets_offset, int realBatchSize, in
 #else
     if (loss_.compare("cross_entropy") == 0)
     {
-        cross_entropy(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset, realBatchSize, classes);
+        cross_entropy(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
     }
     else if (loss_.compare("mse") == 0)
     {
-        mse(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset, realBatchSize, classes);
+        mse(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
     }
     else
     {
@@ -269,17 +268,17 @@ void Net::getOutputs(Tensor<float> *outputs, int outputs_offset, int forwardTens
     {
         float *outputs_start = outputs->getGpuPtr() + outputs_offset*classes;
         float *forwardTensor_start = layers_.back()->forwardTensor_->getGpuPtr() + forwardTensor_offset*classes;
-        copy_gpu(outputs_start, forwardTensor_start, realBatchSize*classes);
+        cudaMemcpy(outputs_start, forwardTensor_start, realBatchSize*classes*sizeof(float), cudaMemcpyDeviceToDevice);
     }
     else
     {
         float *outputs_start = outputs->getCpuPtr() + outputs_offset*classes;
         float *forwardTensor_start = layers_.back()->forwardTensor_->getCpuPtr() + forwardTensor_offset*classes;
-        copy(outputs_start, forwardTensor_start, realBatchSize*classes);
+        memcpy(outputs_start, forwardTensor_start, realBatchSize*classes*sizeof(float));
     }
 #else
     float *outputs_start = outputs->getCpuPtr() + outputs_offset*classes;
     float *forwardTensor_start = layers_.back()->forwardTensor_->getCpuPtr() + forwardTensor_offset*classes;
-    copy(outputs_start, forwardTensor_start, realBatchSize*classes);
+    memcpy(outputs_start, forwardTensor_start, realBatchSize*classes*sizeof(float));
 #endif
 }

@@ -63,17 +63,21 @@ public:
     std::vector<int> getNumWeights();
 
 private:
-    int channels_;                // the second dimension of input
-
-    Tensor<float> *mean_;         // mean
-    Tensor<float> *std_;          // std
     Tensor<float> *beta_;         // beta
     Tensor<float> *gamma_;        // gamma
-
-    Tensor<float> *running_mean_; // running mean
-    Tensor<float> *running_std_;  // running std
     Tensor<float> *grad_beta_;    // gradients of beta
-    Tensor<float> *grad_gamma_;   // gradients of beta
+    Tensor<float> *grad_gamma_;   // gradients of gama
+
+    Tensor<float> *mean_;         // mean = 1/n sum(x)
+    Tensor<float> *var_;          // var = 1/n * sum(sq)
+    Tensor<float> *running_mean_; // running mean
+    Tensor<float> *running_var_;  // running variance
+
+    Tensor<float> *xhat_;         // xhat = xmean * istd
+    Tensor<float> *grad_xhat_;    // gradients of xhat
+
+    Tensor<float> *temp1_;        // temporary tensor used in backward propagation
+    Tensor<float> *temp2_;        // temporary tensor used in backward propagation
 };
 
 #endif
