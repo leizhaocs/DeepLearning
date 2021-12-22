@@ -80,5 +80,5 @@ void backward_bias_gpu(Tensor<float> *grad_biases, Tensor<float> *delta)
     {
         backward_bias_kernel<<<GRID(channels), BLOCK>>>(grad_biases_ptr, delta_ptr, batch_size, channels, plane_size);
     }
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }

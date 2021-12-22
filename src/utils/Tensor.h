@@ -40,6 +40,14 @@ public:
 #if GPU == 1
     /* get gpu data pointer */
     T *getGpuPtr();
+
+#if CUDNN == 1
+    /* get the tensor descriptor */
+    cudnnTensorDescriptor_t getTensorDescriptor();
+
+    /* get the filter descriptor */
+    cudnnFilterDescriptor_t getFilterDescriptor();
+#endif
 #endif
 
     /* get dimensions */
@@ -57,6 +65,9 @@ public:
     /* get number of elements in one plane */
     int plane_size();
 
+    /* get the total memory space of the tensor */
+    int total_bytes();
+
     /* get data element */
     T &data(int i);
     T &data(int n, int i);
@@ -72,17 +83,23 @@ public:
 #endif
 
 private:
-    T *data_cpu_;         // raw data on cpu
+    T *data_cpu_;                          // raw data on cpu
 #if GPU == 1
-    T *data_gpu_;         // raw data on gpu
+    T *data_gpu_;                          // raw data on gpu
+#if CUDNN == 1
+    cudnnTensorDescriptor_t tensor_desc_;  // tensor descriptor (when this tensor is used as tensor)
+    cudnnFilterDescriptor_t filter_desc_;  // filter descriptor (when this tensor is used as filter)
+    bool init_tensor_desc_;                // true if tensor descriptor has been initialized
+    bool init_filter_desc_;                // true if filter descriptor has been initialized
 #endif
-    int n_;               // batch size
-    int c_;               // channel
-    int h_;               // height
-    int w_;               // width
-    int total_size_;            // total number of elements, n_*c_*h_*w_
-    int sample_size_;     // number of elements in one sample, c_*h_*w_
-    int plane_size_;      // number of elements in one plane, h_*w_
+#endif
+    int n_;                                // batch size
+    int c_;                                // channel
+    int h_;                                // height
+    int w_;                                // width
+    int total_size_;                       // total number of elements, n_*c_*h_*w_
+    int sample_size_;                      // number of elements in one sample, c_*h_*w_
+    int plane_size_;                       // number of elements in one plane, h_*w_
 };
 
 #endif

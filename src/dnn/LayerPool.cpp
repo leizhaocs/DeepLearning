@@ -55,6 +55,20 @@ LayerPool::LayerPool(Params *params, Layer *prev_layer)
     backwardTensor_ = new Tensor<float>(n_, c_, h_, w_);
 
     indexTensor_ = new Tensor<int>(n_, c_, h_, w_);
+
+#if GPU == 1
+#if CUDNN == 1
+    cudnnCreatePoolingDescriptor(&pool_desc_);
+    if (pool_type_ == "max")
+    {
+        cudnnSetPooling2dDescriptor(pool_desc_, CUDNN_POOLING_MAX, CUDNN_PROPAGATE_NAN, filter_h_, filter_w_, 0, 0, stride_h_, stride_w_);
+    }
+    else
+    {
+        Assert(false, "Unrecognized pooling function.");
+    }
+#endif
+#endif
 }
 
 /* destructor */
@@ -63,6 +77,11 @@ LayerPool::~LayerPool()
     delete forwardTensor_;
     delete backwardTensor_;
     delete indexTensor_;
+#if GPU == 1
+#if CUDNN == 1
+    cudnnDestroyPoolingDescriptor(pool_desc_);
+#endif
+#endif
 }
 
 /* forward propagation */
@@ -106,6 +125,15 @@ void LayerPool::gpu_forward(int realBatchSize, bool train)
 {
     clear_gpu(forwardTensor_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    CHECK_CUDNN_ERRORS(cudnnPoolingForward(cudnn_handle(), pool_desc_, &one,
+        prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+        &zero,
+        forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr()));
+#else
     if (pool_type_ == "max")
     {
         maxpool_gpu(prev_layer_->forwardTensor_, forwardTensor_, indexTensor_, stride_h_, stride_w_, filter_h_, filter_w_, padding_h_, padding_w_);
@@ -114,6 +142,7 @@ void LayerPool::gpu_forward(int realBatchSize, bool train)
     {
         Assert(false, "Unrecognized pooling function.");
     }
+#endif
 }
 
 /* backward propagation */
@@ -121,6 +150,18 @@ void LayerPool::gpu_backward(int realBatchSize)
 {
     clear_gpu(prev_layer_->backwardTensor_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    CHECK_CUDNN_ERRORS(cudnnPoolingBackward(cudnn_handle(), pool_desc_,
+            &one,
+            forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr(),
+            backwardTensor_->getTensorDescriptor(), backwardTensor_->getGpuPtr(),
+            prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+            &zero,
+            prev_layer_->backwardTensor_->getTensorDescriptor(), prev_layer_->backwardTensor_->getGpuPtr()));
+#else
     if (pool_type_ == "max")
     {
         backward_maxpool_gpu(backwardTensor_, prev_layer_->backwardTensor_, indexTensor_, stride_h_, stride_w_, filter_h_, filter_w_, padding_h_, padding_w_);
@@ -129,6 +170,7 @@ void LayerPool::gpu_backward(int realBatchSize)
     {
         Assert(false, "Unrecognized pooling function.");
     }
+#endif
 }
 
 /* update weights and biases */

@@ -62,18 +62,24 @@ public:
     vector<int> getNumWeights();
 
 private:
-    string pool_type_;            // pooling type
+    string pool_type_;                     // pooling type
 
-    int filter_h_;                // filter height
-    int filter_w_;                // filter width
+    int filter_h_;                         // filter height
+    int filter_w_;                         // filter width
 
-    int stride_h_;                // stride height
-    int stride_w_;                // stride width
+    int stride_h_;                         // stride height
+    int stride_w_;                         // stride width
 
-    int padding_h_;               // padding height
-    int padding_w_;               // padding width
+    int padding_h_;                        // padding height
+    int padding_w_;                        // padding width
 
-    Tensor<int> *indexTensor_;    // recording the index of the maximum neuron in the max pooling window
+    Tensor<int> *indexTensor_;             // recording the index of the maximum neuron in the max pooling window
+
+#if GPU == 1
+#if CUDNN == 1
+    cudnnPoolingDescriptor_t pool_desc_;   // pooling descriptor
+#endif
+#endif
 };
 
 #endif

@@ -60,8 +60,8 @@ void MemoryMonitor::printCpuMemory()
 void MemoryMonitor::gpuMalloc(void **devPtr, int size)
 {
     gpuMemory += size;
-    cudaError_t error = cudaMalloc(devPtr, size);
-    Assert(error == cudaSuccess, "Device memory allocation failed.");
+    cudaMalloc(devPtr, size);
+    CHECK_CUDA_ERRORS();
     gpuPoint[*devPtr] = size;
 }
 
@@ -72,6 +72,7 @@ void MemoryMonitor::freeGpuMemory(void *ptr)
     {
         gpuMemory -= gpuPoint[ptr];
         cudaFree(ptr);
+        CHECK_CUDA_ERRORS();
         gpuPoint.erase(ptr);
     }
 }

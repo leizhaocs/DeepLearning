@@ -63,21 +63,33 @@ public:
     vector<int> getNumWeights();
 
 private:
-    int num_filters_;                        // number of filters
-    int filter_h_;                           // filter height
-    int filter_w_;                           // filter width
+    int num_filters_;                                       // number of filters
+    int filter_h_;                                          // filter height
+    int filter_w_;                                          // filter width
 
-    int stride_h_;                           // stride height
-    int stride_w_;                           // stride width
+    int stride_h_;                                          // stride height
+    int stride_w_;                                          // stride width
 
-    int padding_h_;                          // padding height
-    int padding_w_;                          // padding width
+    int padding_h_;                                         // padding height
+    int padding_w_;                                         // padding width
 
-    Tensor<float> *filters_;                 // filters (f,c,h,w)
-    Tensor<float> *biases_;                  // biases (f)
+    Tensor<float> *filters_;                                // filters (f,c,h,w)
+    Tensor<float> *biases_;                                 // biases (f)
 
-    Tensor<float> *grad_filters_;            // gradients of filters (f,c,h,w)
-    Tensor<float> *grad_biases_;             // gradients of biases (f)
+    Tensor<float> *grad_filters_;                           // gradients of filters (f,c,h,w)
+    Tensor<float> *grad_biases_;                            // gradients of biases (f)
+
+#if GPU == 1
+#if CUDNN == 1
+    cudnnConvolutionDescriptor_t conv_desc_;                // convolution descriptor
+    cudnnConvolutionFwdAlgo_t conv_fwd_algo_;               // forward propagation algorithm
+    cudnnConvolutionBwdDataAlgo_t conv_bwd_data_algo_;      // data backward propagation algorithm
+    cudnnConvolutionBwdFilterAlgo_t conv_bwd_filter_algo_;  // filter backward propagation algorithm
+
+    size_t workspace_size_;                                 // size of the workspace
+    void **workspace_;                                      // workspace for convolution
+#endif
+#endif
 };
 
 #endif

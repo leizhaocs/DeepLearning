@@ -40,6 +40,36 @@ LayerDrop::LayerDrop(Params *params, Layer *prev_layer)
     rate_ = params->getScalarf("rate");
 
     dropoutTensor_ = new Tensor<float>(n_, c_, h_, w_);
+
+#if GPU == 1
+#if CUDNN == 1
+    state_size_ = 0;
+    states_ = NULL;
+    reservespace_size_ = 0;
+    reservespace_ = NULL;
+
+    CHECK_CUDNN_ERRORS(cudnnCreateDropoutDescriptor(&dropout_desc_));
+    CHECK_CUDNN_ERRORS(cudnnDropoutGetStatesSize(cudnn_handle(), &state_size_));
+    if (state_size_ > 0)
+    {
+        if (states_ != NULL)
+        {
+            MemoryMonitor::instance()->freeGpuMemory(states_);
+        }
+        MemoryMonitor::instance()->gpuMalloc((void**)&states_, state_size_);
+    }
+    CHECK_CUDNN_ERRORS(cudnnSetDropoutDescriptor(dropout_desc_, cudnn_handle(), rate_, states_, state_size_, 0));
+    CHECK_CUDNN_ERRORS(cudnnDropoutGetReserveSpaceSize(prev_layer_->forwardTensor_->getTensorDescriptor(), &reservespace_size_));
+    if (reservespace_size_ > 0)
+    {
+        if (reservespace_ != NULL)
+        {
+            MemoryMonitor::instance()->freeGpuMemory(reservespace_);
+        }
+        MemoryMonitor::instance()->gpuMalloc((void**)&reservespace_, reservespace_size_);
+    }
+#endif
+#endif
 }
 
 /* destructor */
@@ -48,6 +78,25 @@ LayerDrop::~LayerDrop()
     delete forwardTensor_;
     delete backwardTensor_;
     delete dropoutTensor_;
+#if GPU == 1
+#if CUDNN == 1
+    CHECK_CUDNN_ERRORS(cudnnDestroyDropoutDescriptor(dropout_desc_));
+    if (state_size_ > 0)
+    {
+        if (states_ != NULL)
+        {
+            MemoryMonitor::instance()->freeGpuMemory(states_);
+        }
+    }
+    if (reservespace_size_ > 0)
+    {
+        if (reservespace_ != NULL)
+        {
+            MemoryMonitor::instance()->freeGpuMemory(reservespace_);
+        }
+    }
+#endif
+#endif
 }
 
 /* forward propagation */
@@ -85,6 +134,20 @@ void LayerDrop::gpu_forward(int realBatchSize, bool train)
 {
     clear_gpu(forwardTensor_);
 
+#if CUDNN == 1
+    if (train)
+    {
+        CHECK_CUDNN_ERRORS(cudnnDropoutForward(cudnn_handle(), dropout_desc_,
+            prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+            forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr(),
+            reservespace_, reservespace_size_));
+    }
+    else
+    {
+        cudaMemcpy(forwardTensor_->getGpuPtr(), prev_layer_->forwardTensor_->getGpuPtr(), forwardTensor_->total_bytes(), cudaMemcpyDeviceToDevice);
+        CHECK_CUDA_ERRORS()
+    }
+#else
     if (train)
     {
         random_gpu(dropoutTensor_);
@@ -94,6 +157,7 @@ void LayerDrop::gpu_forward(int realBatchSize, bool train)
     {
         assign_gpu(forwardTensor_, prev_layer_->forwardTensor_);
     }
+#endif
 }
 
 /* backward propagation */
@@ -101,7 +165,14 @@ void LayerDrop::gpu_backward(int realBatchSize)
 {
     clear_gpu(prev_layer_->backwardTensor_);
 
+#if CUDNN == 1
+    CHECK_CUDNN_ERRORS(cudnnDropoutBackward(cudnn_handle(), dropout_desc_,
+        backwardTensor_->getTensorDescriptor(), backwardTensor_->getGpuPtr(),
+        prev_layer_->backwardTensor_->getTensorDescriptor(), prev_layer_->backwardTensor_->getGpuPtr(),
+        reservespace_, reservespace_size_));
+#else
     assign_cond_gpu(prev_layer_->backwardTensor_, backwardTensor_, dropoutTensor_, rate_);
+#endif
 }
 
 /* update weights and biases */

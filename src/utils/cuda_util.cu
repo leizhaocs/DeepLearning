@@ -35,36 +35,30 @@ dim3 cuda_gridsize(int n)
     return d;
 }
 
-/* check cuda error */
-void check_cuda_error()
-{                     
-    cudaError_t error = cudaGetLastError();
-    if (error != cudaSuccess)
-    {
-        printf("Cuda failure %s:%d:\n",__FILE__,__LINE__);
-        exit(1);
-    }
-}
-
-/* check cublas error */
-void check_cublas_error(cublasStatus_t status)
-{                     
-    if (status != CUBLAS_STATUS_SUCCESS)
-    {
-        printf("Cuda failure %s:%d\n",__FILE__,__LINE__);
-        exit(1);
-    }
-}
-
-/* get blas handle */
-cublasHandle_t blas_handle()
+/* get cublas handle */
+cublasHandle_t cublas_handle()
 {
-    static int init = 0;
-    static cublasHandle_t handle;
-    if (!init)
+    static int cublas_init = 0;
+    static cublasHandle_t cublas_handle;
+    if (!cublas_init)
     {
-        cublasCreate(&handle);
-        init = 1;
+        cublasCreate(&cublas_handle);
+        cublas_init = 1;
     }
-    return handle;
+    return cublas_handle;
 }
+
+#if CUDNN == 1
+/* get cudnn handle */
+cudnnHandle_t cudnn_handle()
+{
+    static int cudnn_init = 0;
+    static cudnnHandle_t cudnn_handle;
+    if (!cudnn_init)
+    {
+        CHECK_CUDNN_ERRORS(cudnnCreate(&cudnn_handle));
+        cudnn_init = 1;
+    }
+    return cudnn_handle;
+}
+#endif

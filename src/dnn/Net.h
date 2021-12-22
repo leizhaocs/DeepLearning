@@ -51,6 +51,9 @@ public:
     /* calculate the loss before backward propagation */
     void loss(Tensor<float> *targets, int targets_offset, int realBatchSize, int classes);
 
+    /* init the backward input of the last layer, i.e. calculate the derivative of loss function */
+    void initBackward(Tensor<float> *targets, int targets_offset, int realBatchSize, int classes);
+
     /* backward propagate through all layers */
     void backward(int realBatchSize);
 

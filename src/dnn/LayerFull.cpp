@@ -42,6 +42,18 @@ LayerFull::LayerFull(Params *params, Layer *prev_layer)
 
     grad_weights_ = new Tensor<float>(sample_size_, 1, 1, prev_layer->sample_size_);
     grad_biases_ = new Tensor<float>(1, 1, 1, sample_size_);
+
+#if GPU == 1
+#if CUDNN == 1
+    one_vec_ = new Tensor<float>(1, n_, 1, 1);
+    for (int i = 0; i < n_; i++)
+    {
+        one_vec_->data(i) = 1;
+    }
+    one_vec_->toGpu();
+#endif
+#endif
+
 }
 
 /* destructor */
@@ -115,6 +127,25 @@ void LayerFull::gpu_forward(int realBatchSize, bool train)
 {
     clear_gpu(forwardTensor_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    CHECK_CUBLAS_ERRORS(cublasSgemm(cublas_handle(), CUBLAS_OP_T, CUBLAS_OP_N, 
+        sample_size_, realBatchSize, prev_layer_->sample_size_,
+        &one,  
+        weights_->getGpuPtr(), prev_layer_->sample_size_, 
+        prev_layer_->forwardTensor_->getGpuPtr(), prev_layer_->sample_size_,
+        &zero, 
+        forwardTensor_->getGpuPtr(),  sample_size_));
+
+    CHECK_CUBLAS_ERRORS(cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N, 
+        sample_size_, realBatchSize, 1,
+        &one, 
+        biases_->getGpuPtr(), sample_size_, 
+        one_vec_->getGpuPtr(), 1, &one, 
+        forwardTensor_->getGpuPtr(),  sample_size_));
+#else
     int m = realBatchSize;
     int n = sample_size_;
     int k = prev_layer_->sample_size_;
@@ -125,6 +156,7 @@ void LayerFull::gpu_forward(int realBatchSize, bool train)
 
     gemm_gpu(0, 1, m, n, k, a, k, b, k, c, n);
     add_expand_channel_gpu(forwardTensor_, biases_);
+#endif
 }
 
 /* backward propagation */
@@ -134,6 +166,33 @@ void LayerFull::gpu_backward(int realBatchSize)
     clear_gpu(grad_weights_);
     clear_gpu(grad_biases_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    CHECK_CUBLAS_ERRORS(cublasSgemv(cublas_handle(), CUBLAS_OP_N,
+        sample_size_, realBatchSize,
+        &one,
+        backwardTensor_->getGpuPtr(), sample_size_,
+        one_vec_->getGpuPtr(), 1, &zero,
+        grad_biases_->getGpuPtr(), 1));
+
+    CHECK_CUBLAS_ERRORS(cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_T,
+        prev_layer_->sample_size_, sample_size_, realBatchSize,
+        &one,
+        prev_layer_->forwardTensor_->getGpuPtr(), prev_layer_->sample_size_,
+        backwardTensor_->getGpuPtr(), sample_size_,
+        &zero,
+        grad_weights_->getGpuPtr(), prev_layer_->sample_size_));
+
+    CHECK_CUBLAS_ERRORS(cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N,
+        prev_layer_->sample_size_, realBatchSize, sample_size_,
+        &one,
+        weights_->getGpuPtr(), prev_layer_->sample_size_,
+        backwardTensor_->getGpuPtr(), sample_size_,
+        &zero, 
+        prev_layer_->backwardTensor_->getGpuPtr(), prev_layer_->sample_size_));
+#else
     int m = realBatchSize;
     int n = prev_layer_->sample_size_;
     int k = sample_size_;
@@ -154,14 +213,20 @@ void LayerFull::gpu_backward(int realBatchSize)
 
     gemm_gpu(1, 0, m, n, k, a, m, b, n, c, n);
     backward_bias_gpu(grad_biases_, backwardTensor_);
+#endif
 }
 
 /* update weights and biases */
 void LayerFull::gpu_update(int realBatchSize, float lr)
 {
     float step = -lr/realBatchSize;
+#if CUDNN == 1
+    CHECK_CUBLAS_ERRORS(cublasSaxpy(cublas_handle(), weights_->total_size(), &step, grad_weights_->getGpuPtr(), 1, weights_->getGpuPtr(), 1));
+    CHECK_CUBLAS_ERRORS(cublasSaxpy(cublas_handle(), biases_->total_size(), &step, grad_biases_->getGpuPtr(), 1, biases_->getGpuPtr(), 1));
+#else
     axpy_gpu(weights_, grad_weights_, step);
     axpy_gpu(biases_, grad_biases_, step);
+#endif
 }
 #endif
 

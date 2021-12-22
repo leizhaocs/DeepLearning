@@ -77,7 +77,7 @@ void maxpool_gpu(Tensor<float> *input, Tensor<float> *output, Tensor<int> *index
     maxpool_kernel<<<GRID(N), BLOCK>>>(N, in_h, in_w, in_c, out_h, out_w,
         stride_h, stride_w, filter_h, filter_w, padding_h, padding_w,
         input_ptr, output_ptr, index_ptr);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void backward_maxpool_kernel(int N, int in_h, int in_w, int in_c, int out_h, int out_w,
@@ -137,5 +137,5 @@ void backward_maxpool_gpu(Tensor<float> *backward_input, Tensor<float> *backward
     backward_maxpool_kernel<<<GRID(N), BLOCK>>>(N, in_h, in_w, in_c, out_h, out_w,
         stride_h, stride_w, filter_h, filter_w, padding_h, padding_w,
         backward_input_ptr, backward_output_ptr, index_ptr);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }

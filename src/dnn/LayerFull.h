@@ -68,6 +68,12 @@ private:
 
     Tensor<float> *grad_weights_;   // gradients of weights (prev_layer->sample_size_, sample_size_)
     Tensor<float> *grad_biases_;    // gradients of biases (sample_size_)
+
+#if GPU == 1
+#if CUDNN == 1
+    Tensor<float> *one_vec_;        // a vector of all 1s, used for adding biases to output
+#endif
+#endif
 };
 
 #endif

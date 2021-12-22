@@ -126,8 +126,9 @@ void train(Net *net,
             net->forward(realBatchSize, true);
 
             net->getOutputs(train_pred, offset, 0, realBatchSize, classes);
+            //net->loss(train_labels, offset, realBatchSize, classes);
 
-            net->loss(train_labels, offset, realBatchSize, classes);
+            net->initBackward(train_labels, offset, realBatchSize, classes);
             net->backward(realBatchSize);
             net->update(realBatchSize, lr);
 

@@ -63,8 +63,20 @@ public:
     vector<int> getNumWeights();
 
 private:
-    float rate_;                     // drop out rate
-    Tensor<float> *dropoutTensor_;   // same size with forwardTensor (randomly generated)
+    float rate_;                             // drop out rate
+    Tensor<float> *dropoutTensor_;           // same size with forwardTensor (randomly generated)
+
+#if GPU == 1
+#if CUDNN == 1
+    cudnnDropoutDescriptor_t dropout_desc_;  // dropout descriptor
+
+    size_t state_size_;                      // size of state size
+    void **states_;                          // states
+
+    size_t reservespace_size_;               // size of the reservespace
+    void **reservespace_;                    // reservespace for dropout
+#endif
+#endif
 };
 
 #endif

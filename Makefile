@@ -1,4 +1,5 @@
 GPU=1
+CUDNN=1
 
 VPATH=./src/ ./src/data ./src/dnn ./src/drl ./src/utils ./src/lib
 OBJDIR=./obj/
@@ -19,6 +20,10 @@ ARCH=-gencode arch=compute_35,code=sm_35 \
 COMMON+=-DGPU=1 -I/usr/local/cuda/include/ -I/usr/local/cuda/NVIDIA_CUDA-11.3_Samples/common/inc/
 NVCCFLAGS=-std=c++11
 LDFLAGS+=-L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand -lstdc++ 
+ifeq ($(CUDNN), 1)
+COMMON+=-DCUDNN=1
+LDFLAGS+=-lcudnn
+endif
 endif
 
 SRC_CPP=$(notdir $(shell find src/ -type f -name '*.cpp'))
@@ -47,7 +52,7 @@ endif
 obj:
 	mkdir -p obj
 
-.PHONY: clean
+.PHONY: clean clean_weights
 
 clean:
 	rm -rf $(EXEC) $(EXECOBJ) $(OBJDIR)/*

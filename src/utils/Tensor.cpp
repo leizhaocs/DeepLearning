@@ -38,6 +38,10 @@ Tensor<T>::Tensor(int n, int c, int h, int w)
     {
         MemoryMonitor::instance()->gpuMalloc((void**)&data_gpu_, total_size_*sizeof(T));
     }
+#if CUDNN == 1
+    init_tensor_desc_ = false;
+    init_filter_desc_ = false;
+#endif
 #endif
 }
 
@@ -51,6 +55,16 @@ Tensor<T>::~Tensor()
     {
         MemoryMonitor::instance()->freeGpuMemory(data_gpu_);
     }
+#if CUDNN == 1
+    if (init_tensor_desc_)
+    {
+        CHECK_CUDNN_ERRORS(cudnnDestroyTensorDescriptor(tensor_desc_));
+    }
+    if (init_filter_desc_)
+    {
+        CHECK_CUDNN_ERRORS(cudnnDestroyFilterDescriptor(filter_desc_));
+    }
+#endif
 #endif
 }
 
@@ -68,6 +82,52 @@ T *Tensor<T>::getGpuPtr()
 {
     return data_gpu_;
 }
+
+#if CUDNN == 1
+/* get the tensor descriptor */
+template<typename T>
+cudnnTensorDescriptor_t Tensor<T>::getTensorDescriptor()
+{
+    if (init_tensor_desc_ == false)
+    {
+        CHECK_CUDNN_ERRORS(cudnnCreateTensorDescriptor(&tensor_desc_));
+        if (strcmp(typeid(data_gpu_).name(), "Pf") == 0)
+        {
+            CHECK_CUDNN_ERRORS(cudnnSetTensor4dDescriptor(tensor_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
+        }
+        else if (strcmp(typeid(data_gpu_).name(), "Pi") == 0)
+        {
+            CHECK_CUDNN_ERRORS(cudnnSetTensor4dDescriptor(tensor_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_INT32, n_, c_, h_, w_));
+        }
+        else
+        {
+            Assert(false, "Unsupported data type in cudnn tensor.");
+        }
+        init_tensor_desc_ = true;
+    }
+    return tensor_desc_;
+}
+
+/* get the filter descriptor */
+template<typename T>
+cudnnFilterDescriptor_t Tensor<T>::getFilterDescriptor()
+{
+    if (init_filter_desc_ == false)
+    {
+        CHECK_CUDNN_ERRORS(cudnnCreateFilterDescriptor(&filter_desc_));
+        if (strcmp(typeid(data_gpu_).name(), "Pf") == 0)
+        {
+            CHECK_CUDNN_ERRORS(cudnnSetFilter4dDescriptor(filter_desc_, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, n_, c_, h_, w_));
+        }
+        else
+        {
+            Assert(false, "Unsupported data type in cudnn filter.");
+        }
+        init_filter_desc_ = true;
+    }
+    return filter_desc_;
+}
+#endif
 #endif
 
 /* get dimensions */
@@ -113,6 +173,13 @@ int Tensor<T>::plane_size()
     return plane_size_;
 }
 
+/* get the total memory space of the tensor */
+template<typename T>
+int Tensor<T>::total_bytes()
+{
+    return total_size_ * sizeof(T);
+}
+
 /* get data element */
 template<typename T>
 T &Tensor<T>::data(int i)
@@ -143,16 +210,22 @@ T &Tensor<T>::data(int n, int c, int h, int w)
 template<typename T>
 void Tensor<T>::toGpu()
 {
-    cudaError_t cudaStat = cudaMemcpy(data_gpu_, data_cpu_, total_size_*sizeof(T), cudaMemcpyHostToDevice);
-    Assert(cudaStat == cudaSuccess, "To gpu data upload failed.");
+    if (use_gpu)
+    {
+        cudaMemcpy(data_gpu_, data_cpu_, total_size_*sizeof(T), cudaMemcpyHostToDevice);
+        CHECK_CUDA_ERRORS();
+    }
 }
 
 /* move data from gpu to cpu */
 template<typename T>
 void Tensor<T>::toCpu()
 {
-    cudaError_t cudaStat = cudaMemcpy(data_cpu_, data_gpu_, total_size_*sizeof(T), cudaMemcpyDeviceToHost);
-    Assert(cudaStat == cudaSuccess, "To cpu data download failed.");
+    if (use_gpu)
+    {
+        cudaMemcpy(data_cpu_, data_gpu_, total_size_*sizeof(T), cudaMemcpyDeviceToHost);
+        CHECK_CUDA_ERRORS();
+    }
 }
 #endif
 

@@ -38,7 +38,7 @@ void clear_gpu(Tensor<float> *X)
     int total_size = X->total_size();
 
     clear_kernel<<<GRID(total_size), BLOCK>>>(X_ptr, total_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void random_kernel(float *X, int total_size)
@@ -61,7 +61,7 @@ void random_gpu(Tensor<float> *X)
     int total_size = X->total_size();
 
     random_kernel<<<GRID(total_size), BLOCK>>>(X_ptr, total_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void add_expand_channel_kernel(float *Y, float *X, int batch_size, int channels, int plane_size)
@@ -88,7 +88,7 @@ void add_expand_channel_gpu(Tensor<float> *Y, Tensor<float> *X)
     int num = channels*plane_size*batch_size;
 
     add_expand_channel_kernel<<<GRID(num), BLOCK>>>(Y_ptr, X_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void axpy_kernel(float *Y, float *X, float ALPHA, int total_size)
@@ -110,7 +110,7 @@ void axpy_gpu(Tensor<float> *Y, Tensor<float> *X, float ALPHA)
     int total_size = Y->total_size();
 
     axpy_kernel<<<GRID(total_size), BLOCK>>>(Y_ptr, X_ptr, ALPHA, total_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 /* Y = X */
@@ -143,7 +143,7 @@ void assign_cond_gpu(Tensor<float> *Y, Tensor<float> *X, Tensor<float> *R, float
     int total_size = Y->total_size();
 
     assign_cond_kernel<<<GRID(total_size), BLOCK>>>(Y_ptr, X_ptr, R_ptr, S, total_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void mean_keep_channel_kernel(float *Y, float *X, int batch_size, int channels, int plane_size)
@@ -178,7 +178,7 @@ void mean_keep_channel_gpu(Tensor<float> *Y, Tensor<float> *X)
     int plane_size = X->plane_size();
 
     mean_keep_channel_kernel<<<GRID(channels), BLOCK>>>(Y_ptr, X_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void variance_keep_channel_kernel(float *Y, float *X, float *MEAN, int batch_size, int channels, int plane_size)
@@ -215,7 +215,7 @@ void variance_keep_channel_gpu(Tensor<float> *Y, Tensor<float> *X, Tensor<float>
     int plane_size = X->plane_size();
 
     variance_keep_channel_kernel<<<GRID(channels), BLOCK>>>(Y_ptr, X_ptr, MEAN_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void normalize_expand_channel_kernel(float *Y, float *X, float *MEAN, float *VAR, int batch_size, int channels, int plane_size)
@@ -244,7 +244,7 @@ void normalize_expand_channel_gpu(Tensor<float> *Y, Tensor<float> *X, Tensor<flo
     int num = channels*plane_size*batch_size;
 
     normalize_expand_channel_kernel<<<GRID(num), BLOCK>>>(Y_ptr, X_ptr, MEAN_ptr, VAR_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void scale_shift_expand_channel_kernel(float *Y, float *X, float *GAMMA, float *BETA, int batch_size, int channels, int plane_size)
@@ -274,7 +274,7 @@ void scale_shift_expand_channel_gpu(Tensor<float> *Y, Tensor<float> *X, Tensor<f
     int num = channels*plane_size*batch_size;
 
     scale_shift_expand_channel_kernel<<<GRID(num), BLOCK>>>(Y_ptr, X_ptr, GAMMA_ptr, BETA_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void add_with_momentum_kernel(float *Y, float *X, float M, int total_size)
@@ -296,7 +296,7 @@ void add_with_momentum_gpu(Tensor<float> *Y, Tensor<float> *X, float M)
     int total_size = Y->total_size();
 
     add_with_momentum_kernel<<<GRID(total_size), BLOCK>>>(Y_ptr, X_ptr, M, total_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void mult_expand_channel_kernel(float *Y, float *X1, float *X2, int batch_size, int channels, int plane_size)
@@ -324,7 +324,7 @@ void mult_expand_channel_gpu(Tensor<float> *Y, Tensor<float> *X1, Tensor<float> 
     int num = channels*plane_size*batch_size;
 
     mult_expand_channel_kernel<<<GRID(num), BLOCK>>>(Y_ptr, X1_ptr, X2_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void sum_keep_channel_kernel(float *Y, float *X, int batch_size, int channels, int plane_size)
@@ -356,7 +356,7 @@ void sum_keep_channel_gpu(Tensor<float> *Y, Tensor<float> *X)
     int plane_size = X->plane_size();
 
     sum_keep_channel_kernel<<<GRID(channels), BLOCK>>>(Y_ptr, X_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void product_sum_keep_channel_kernel(float *Y, float *X1, float *X2, int batch_size, int channels, int plane_size)
@@ -389,7 +389,7 @@ void product_sum_keep_channel_gpu(Tensor<float> *Y, Tensor<float> *X1, Tensor<fl
     int plane_size = X1->plane_size();
 
     product_sum_keep_channel_kernel<<<GRID(channels), BLOCK>>>(Y_ptr, X1_ptr, X2_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void backward_batchnorm_temp_kernel(float *T1, float *T2, float *DXHAT, float *XHAT, int batch_size, int channels, int plane_size)
@@ -443,7 +443,7 @@ void backward_batchnorm_gpu(Tensor<float> *DX, Tensor<float> *DXHAT, Tensor<floa
 
     backward_batchnorm_temp_kernel<<<GRID(channels), BLOCK>>>(T1_ptr, T2_ptr, DXHAT_ptr, XHAT_ptr, batch_size, channels, plane_size);
     backward_batchnorm_kernel<<<GRID(num), BLOCK>>>(DX_ptr, DXHAT_ptr, XHAT_ptr, VAR_ptr, T1_ptr, T2_ptr, batch_size, channels, plane_size);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }
 
 __global__ void dqn_target_kernel(float *targets, float *outputs, float lambda, float *rewards, int *actions, int *final_states, int batch_size, int n)
@@ -486,5 +486,5 @@ __global__ void dqn_target_kernel(float *targets, float *outputs, float lambda, 
 void dqn_target_gpu(float *targets, float *outputs, float lambda, float *rewards, int *actions, int *final_states, int batch_size, int n)
 {
     dqn_target_kernel<<<GRID(batch_size), BLOCK>>>(targets, outputs, lambda, rewards, actions, final_states, batch_size, n);
-    check_cuda_error();
+    CHECK_CUDA_ERRORS();
 }

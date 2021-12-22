@@ -63,21 +63,27 @@ public:
     std::vector<int> getNumWeights();
 
 private:
-    Tensor<float> *beta_;         // beta
-    Tensor<float> *gamma_;        // gamma
-    Tensor<float> *grad_beta_;    // gradients of beta
-    Tensor<float> *grad_gamma_;   // gradients of gama
+    Tensor<float> *beta_;                               // beta
+    Tensor<float> *gamma_;                              // gamma
+    Tensor<float> *grad_beta_;                          // gradients of beta
+    Tensor<float> *grad_gamma_;                         // gradients of gama
 
-    Tensor<float> *mean_;         // mean = 1/n sum(x)
-    Tensor<float> *var_;          // var = 1/n * sum(sq)
-    Tensor<float> *running_mean_; // running mean
-    Tensor<float> *running_var_;  // running variance
+    Tensor<float> *mean_;                               // mean = 1/n sum(x)
+    Tensor<float> *var_;                                // var = 1/n * sum(sq)
+    Tensor<float> *running_mean_;                       // running mean
+    Tensor<float> *running_var_;                        // running variance
 
-    Tensor<float> *xhat_;         // xhat = xmean * istd
-    Tensor<float> *grad_xhat_;    // gradients of xhat
+    Tensor<float> *xhat_;                               // xhat = xmean * istd
+    Tensor<float> *grad_xhat_;                          // gradients of xhat
 
-    Tensor<float> *temp1_;        // temporary tensor used in backward propagation
-    Tensor<float> *temp2_;        // temporary tensor used in backward propagation
+    Tensor<float> *temp1_;                              // temporary tensor used in backward propagation
+    Tensor<float> *temp2_;                              // temporary tensor used in backward propagation
+
+#if GPU == 1
+#if CUDNN == 1
+    cudnnTensorDescriptor_t scale_bias_mean_var_desc_;  // tensor descriptor for beta, gamma, mean, and var
+#endif
+#endif
 };
 
 #endif

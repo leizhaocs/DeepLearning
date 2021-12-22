@@ -53,10 +53,86 @@ LayerConv::LayerConv(Params *params, Layer *prev_layer)
     backwardTensor_ = new Tensor<float>(n_, c_, h_, w_);
 
     filters_ = new Tensor<float>(num_filters_, prev_layer_->c_, filter_h_, filter_w_);
-    biases_ = new Tensor<float>(1, 1, 1, num_filters_);
+    biases_ = new Tensor<float>(1, num_filters_, 1, 1);
 
     grad_filters_ = new Tensor<float>(num_filters_, prev_layer_->c_, filter_h_, filter_w_);
-    grad_biases_ = new Tensor<float>(1, 1, 1, num_filters_);
+    grad_biases_ = new Tensor<float>(1, num_filters_, 1, 1);
+
+#if GPU == 1
+#if CUDNN == 1
+    CHECK_CUDNN_ERRORS(cudnnCreateConvolutionDescriptor(&conv_desc_));
+    CHECK_CUDNN_ERRORS(cudnnSetConvolution2dDescriptor(conv_desc_, padding_h_, padding_w_, stride_h_, stride_w_, 1, 1,
+        CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+    CHECK_CUDNN_ERRORS(cudnnSetConvolutionMathType(conv_desc_, CUDNN_DEFAULT_MATH));
+
+    workspace_size_ = 0;
+    workspace_ = NULL;
+    size_t temp_size = 0;
+
+#if CUDNN_MAJOR >= 7
+    vector<cudnnConvolutionFwdAlgoPerf_t> fwd_algo_perf_results(CUDNN_CONVOLUTION_FWD_ALGO_COUNT);
+    vector<cudnnConvolutionBwdFilterAlgoPerf_t> bwd_filter_algo_perf_results(CUDNN_CONVOLUTION_BWD_FILTER_ALGO_COUNT);
+    vector<cudnnConvolutionBwdDataAlgoPerf_t> bwd_data_algo_perf_results(CUDNN_CONVOLUTION_BWD_DATA_ALGO_COUNT);
+
+    int algo_max_count;
+    int returnedAlgoCount = 0;
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionForwardAlgorithmMaxCount(cudnn_handle(), &algo_max_count));
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionForwardAlgorithm_v7(cudnn_handle(),
+        prev_layer_->forwardTensor_->getTensorDescriptor(), filters_->getFilterDescriptor(), conv_desc_, forwardTensor_->getTensorDescriptor(),
+        algo_max_count, &returnedAlgoCount, &fwd_algo_perf_results[0]));
+    conv_fwd_algo_ = fwd_algo_perf_results[0].algo;
+#else
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionForwardAlgorithm(cudnn_handle(),
+        prev_layer_->forwardTensor_->getTensorDescriptor(), filters_->getFilterDescriptor(), conv_desc_, forwardTensor_->getTensorDescriptor(),
+        CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 0, &conv_fwd_algo_));
+#endif
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionForwardWorkspaceSize(cudnn_handle(),
+        prev_layer_->forwardTensor_->getTensorDescriptor(), filters_->getFilterDescriptor(), conv_desc_, forwardTensor_->getTensorDescriptor(),
+        conv_fwd_algo_, &temp_size));
+    workspace_size_ = max(workspace_size_, temp_size);
+
+#if CUDNN_MAJOR >= 7
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionBackwardFilterAlgorithmMaxCount(cudnn_handle(), &algo_max_count));
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionBackwardFilterAlgorithm_v7(cudnn_handle(),
+        prev_layer_->forwardTensor_->getTensorDescriptor(), forwardTensor_->getTensorDescriptor(), conv_desc_, filters_->getFilterDescriptor(),
+        algo_max_count, &returnedAlgoCount, &bwd_filter_algo_perf_results[0]));
+    conv_bwd_filter_algo_ = bwd_filter_algo_perf_results[0].algo;
+#else
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionBackwardFilterAlgorithm(cudnn_handle(),
+        prev_layer_->forwardTensor_->getTensorDescriptor(), forwardTensor_->getTensorDescriptor(), conv_desc_, filters_->getFilterDescriptor(),
+        CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &conv_bwd_filter_algo_));
+#endif
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionBackwardFilterWorkspaceSize(cudnn_handle(),
+        prev_layer_->forwardTensor_->getTensorDescriptor(), forwardTensor_->getTensorDescriptor(), conv_desc_, filters_->getFilterDescriptor(),
+        conv_bwd_filter_algo_, &temp_size));
+    workspace_size_ = max(workspace_size_, temp_size);
+
+#if CUDNN_MAJOR >= 7
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionBackwardDataAlgorithmMaxCount(cudnn_handle(), &algo_max_count));
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionBackwardDataAlgorithm_v7(cudnn_handle(),
+        filters_->getFilterDescriptor(), forwardTensor_->getTensorDescriptor(), conv_desc_, prev_layer_->forwardTensor_->getTensorDescriptor(),
+        algo_max_count, &returnedAlgoCount, &bwd_data_algo_perf_results[0]));
+    conv_bwd_data_algo_ = bwd_data_algo_perf_results[0].algo;
+#else
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionBackwardDataAlgorithm(cudnn_handle(),
+        filters_->getFilterDescriptor(), forwardTensor_->getTensorDescriptor(), conv_desc_, prev_layer_->forwardTensor_->getTensorDescriptor(),
+        CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &conv_bwd_data_algo_));
+#endif
+    CHECK_CUDNN_ERRORS(cudnnGetConvolutionBackwardDataWorkspaceSize(cudnn_handle(),
+        filters_->getFilterDescriptor(), forwardTensor_->getTensorDescriptor(), conv_desc_, prev_layer_->forwardTensor_->getTensorDescriptor(),
+        conv_bwd_data_algo_, &temp_size));
+    workspace_size_ = max(workspace_size_, temp_size);
+
+    if (workspace_size_ > 0)
+    {
+        if (workspace_ != NULL)
+        {
+            MemoryMonitor::instance()->freeGpuMemory(workspace_);
+        }
+        MemoryMonitor::instance()->gpuMalloc((void**)&workspace_, workspace_size_);
+    }
+#endif
+#endif
 }
 
 /* destructor */
@@ -68,6 +144,18 @@ LayerConv::~LayerConv()
     delete biases_;
     delete grad_filters_;
     delete grad_biases_;
+#if GPU == 1
+#if CUDNN == 1
+    CHECK_CUDNN_ERRORS(cudnnDestroyConvolutionDescriptor(conv_desc_));
+    if (workspace_size_ > 0)
+    {
+        if (workspace_ != NULL)
+        {
+            MemoryMonitor::instance()->freeGpuMemory(workspace_);
+        }
+    }
+#endif
+#endif
 }
 
 /* forward propagation */
@@ -149,6 +237,21 @@ void LayerConv::gpu_forward(int realBatchSize, bool train)
 {
     clear_gpu(forwardTensor_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    CHECK_CUDNN_ERRORS(cudnnConvolutionForward(cudnn_handle(), &one,
+        prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+        filters_->getFilterDescriptor(), filters_->getGpuPtr(),
+        conv_desc_, conv_fwd_algo_, workspace_, workspace_size_,
+        &zero, forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr()));
+
+    CHECK_CUDNN_ERRORS(cudnnAddTensor(cudnn_handle(), &one,
+        biases_->getTensorDescriptor(), biases_->getGpuPtr(),
+        &one,
+        forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr()));
+#else
     int m = num_filters_;
     int n = h_ * w_;
     int k = filter_h_ * filter_w_ * prev_layer_->c_;
@@ -167,6 +270,7 @@ void LayerConv::gpu_forward(int realBatchSize, bool train)
     }
     delete atensor;
     add_expand_channel_gpu(forwardTensor_, biases_);
+#endif
 }
 
 /* backward propagation */
@@ -176,6 +280,27 @@ void LayerConv::gpu_backward(int realBatchSize)
     clear_gpu(grad_filters_);
     clear_gpu(grad_biases_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    CHECK_CUDNN_ERRORS(cudnnConvolutionBackwardBias(cudnn_handle(), &one,
+            backwardTensor_->getTensorDescriptor(), backwardTensor_->getGpuPtr(),
+            &zero,
+            grad_biases_->getTensorDescriptor(), grad_biases_->getGpuPtr()));
+
+    CHECK_CUDNN_ERRORS(cudnnConvolutionBackwardFilter(cudnn_handle(), &one,
+            prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+            backwardTensor_->getTensorDescriptor(), backwardTensor_->getGpuPtr(),
+            conv_desc_, conv_bwd_filter_algo_, workspace_, workspace_size_, &zero,
+            grad_filters_->getFilterDescriptor(), grad_filters_->getGpuPtr()));
+
+    CHECK_CUDNN_ERRORS(cudnnConvolutionBackwardData(cudnn_handle(), &one,
+                filters_->getFilterDescriptor(), filters_->getGpuPtr(),
+                backwardTensor_->getTensorDescriptor(), backwardTensor_->getGpuPtr(),
+                conv_desc_, conv_bwd_data_algo_, workspace_, workspace_size_, &zero,
+                prev_layer_->backwardTensor_->getTensorDescriptor(), prev_layer_->backwardTensor_->getGpuPtr()));
+#else
     int m = num_filters_;
     int n = filter_h_ * filter_w_ * prev_layer_->c_;
     int k = h_ * w_;
@@ -207,15 +332,20 @@ void LayerConv::gpu_backward(int realBatchSize)
     }
     delete atensor;
     backward_bias_gpu(grad_biases_, backwardTensor_);
+#endif
 }
 
 /* update weights and biases */
 void LayerConv::gpu_update(int realBatchSize, float lr)
 {
     float step = -lr/realBatchSize;
-
+#if CUDNN == 1
+    CHECK_CUBLAS_ERRORS(cublasSaxpy(cublas_handle(), filters_->total_size(), &step, grad_filters_->getGpuPtr(), 1, filters_->getGpuPtr(), 1));
+    CHECK_CUBLAS_ERRORS(cublasSaxpy(cublas_handle(), biases_->total_size(), &step, grad_biases_->getGpuPtr(), 1, biases_->getGpuPtr(), 1));
+#else
     axpy_gpu(filters_, grad_filters_, step);
     axpy_gpu(biases_, grad_biases_, step);
+#endif
 }
 #endif
 

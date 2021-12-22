@@ -26,15 +26,27 @@
 /* cross entropy loss */
 void cross_entropy(Tensor<float> *errors, Tensor<float> *outputs, Tensor<float> *targets, int targets_offset);
 
+/* backward of cross entropy loss */
+void backward_cross_entropy(Tensor<float> *errors, Tensor<float> *outputs, Tensor<float> *targets, int targets_offset);
+
 /* mean squared loss */
 void mse(Tensor<float> *errors, Tensor<float> *outputs, Tensor<float> *targets, int targets_offset);
+
+/* backward of mean squared loss */
+void backward_mse(Tensor<float> *errors, Tensor<float> *outputs, Tensor<float> *targets, int targets_offset);
 
 #if GPU == 1
 /* cross entropy loss */
 void cross_entropy_gpu(Tensor<float> *errors, Tensor<float> *outputs, Tensor<float> *targets, int targets_offset);
 
+/* backward of cross entropy loss */
+void backward_cross_entropy_gpu(Tensor<float> *errors, Tensor<float> *outputs, Tensor<float> *targets, int targets_offset);
+
 /* mean squared loss */
 void mse_gpu(Tensor<float> *errors, Tensor<float> *outputs, Tensor<float> *targets, int targets_offset);
+
+/* backward of mean squared loss */
+void backward_mse_gpu(Tensor<float> *errors, Tensor<float> *outputs, Tensor<float> *targets, int targets_offset);
 #endif
 
 #endif

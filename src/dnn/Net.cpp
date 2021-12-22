@@ -220,6 +220,56 @@ void Net::loss(Tensor<float> *targets, int targets_offset, int realBatchSize, in
 #endif
 }
 
+/* init the backward input of the last layer, i.e. calculate the derivative of loss function */
+void Net::initBackward(Tensor<float> *targets, int targets_offset, int realBatchSize, int classes)
+{
+#if GPU == 1
+    if (use_gpu)
+    {
+        if (loss_.compare("cross_entropy") == 0)
+        {
+            backward_cross_entropy_gpu(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
+        }
+        else if (loss_.compare("mse") == 0)
+        {
+            backward_mse_gpu(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
+        }
+        else
+        {
+            Assert(false, "Unsupported loss function");
+        }
+    }
+    else
+    {
+        if (loss_.compare("cross_entropy") == 0)
+        {
+            backward_cross_entropy(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
+        }
+        else if (loss_.compare("mse") == 0)
+        {
+            backward_mse(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
+        }
+        else
+        {
+            Assert(false, "Unsupported loss function");
+        }
+    }
+#else
+    if (loss_.compare("cross_entropy") == 0)
+    {
+        backward_cross_entropy(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
+    }
+    else if (loss_.compare("mse") == 0)
+    {
+        backward_mse(layers_.back()->backwardTensor_, layers_.back()->forwardTensor_, targets, targets_offset);
+    }
+    else
+    {
+        Assert(false, "Unsupported loss function");
+    }
+#endif
+}
+
 /* backward propagate through all layers */
 void Net::backward(int realBatchSize)
 {

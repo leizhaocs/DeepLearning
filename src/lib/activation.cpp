@@ -121,10 +121,24 @@ void softmax(Tensor<float> *input, Tensor<float> *output)
 /* backward of softmax */
 void backward_softmax(Tensor<float> *backward_input, Tensor<float> *forward_output, Tensor<float> *backward_output)
 {
-    int total_size = backward_output->total_size();
+    int batch_size = backward_output->getN();
+    int sample_size = backward_output->sample_size();
 
+/* FIXME: implement the optimized derivative computation for softmax+cross_entropy
     for (int i = 0; i < total_size; i++)
     {
         backward_output->data(i) = forward_output->data(i) - (backward_input->data(i) != 0);
+    }
+*/
+    for (int b = 0; b < batch_size; b++)
+    {
+        for (int s = 0; s < sample_size; s++)
+        {
+            backward_output->data(b, s) = 0;
+            for (int t = 0; t < sample_size; t++)
+            {
+                backward_output->data(b, s) += -1 * forward_output->data(b, s) * (forward_output->data(b, t) - (t==s)) * backward_input->data(b, t);
+            }
+        }
     }
 }

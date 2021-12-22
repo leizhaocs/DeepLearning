@@ -38,6 +38,33 @@ LayerAct::LayerAct(Params *params, Layer *prev_layer)
 
     Assert(params->hasField("nonlinear"), "Activation Layer must have nonlinear specified.");
     nonlinear_ = params->getString("nonlinear");
+
+#if GPU == 1
+#if CUDNN == 1
+    if (nonlinear_ == "relu")
+    {
+        CHECK_CUDNN_ERRORS(cudnnCreateActivationDescriptor(&act_desc_));
+        CHECK_CUDNN_ERRORS(cudnnSetActivationDescriptor(act_desc_, CUDNN_ACTIVATION_RELU, CUDNN_PROPAGATE_NAN, 0));
+    }
+    else if (nonlinear_ == "sigmoid")
+    {
+        CHECK_CUDNN_ERRORS(cudnnCreateActivationDescriptor(&act_desc_));
+        CHECK_CUDNN_ERRORS(cudnnSetActivationDescriptor(act_desc_, CUDNN_ACTIVATION_SIGMOID, CUDNN_PROPAGATE_NAN, 0));
+    }
+    else if (nonlinear_ == "tanh")
+    {
+        CHECK_CUDNN_ERRORS(cudnnCreateActivationDescriptor(&act_desc_));
+        CHECK_CUDNN_ERRORS(cudnnSetActivationDescriptor(act_desc_, CUDNN_ACTIVATION_TANH, CUDNN_PROPAGATE_NAN, 0));
+    }
+    else if (nonlinear_ == "softmax")
+    {
+    }
+    else
+    {
+        Assert(false, "Unsupported nonlinear function.");
+    }
+#endif
+#endif
 }
 
 /* destructor */
@@ -45,6 +72,14 @@ LayerAct::~LayerAct()
 {
     delete forwardTensor_;
     delete backwardTensor_;
+#if GPU == 1
+#if CUDNN == 1
+    if ((nonlinear_ == "relu") || (nonlinear_ == "sigmoid") || (nonlinear_ == "tanh"))
+    {
+        CHECK_CUDNN_ERRORS(cudnnDestroyActivationDescriptor(act_desc_));
+    }
+#endif
+#endif
 }
 
 /* forward propagation */
@@ -112,6 +147,29 @@ void LayerAct::gpu_forward(int realBatchSize, bool train)
 {
     clear_gpu(forwardTensor_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    if ((nonlinear_ == "relu") || (nonlinear_ == "sigmoid") || (nonlinear_ == "tanh"))
+    {
+        CHECK_CUDNN_ERRORS(cudnnActivationForward(cudnn_handle(), act_desc_, &one,
+            prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+            &zero,
+            forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr()));
+    }
+    else if (nonlinear_ == "softmax")
+    {
+        CHECK_CUDNN_ERRORS(cudnnSoftmaxForward(cudnn_handle(), CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_CHANNEL, &one,
+            prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+            &zero,
+            forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr()));
+    }
+    else
+    {
+        Assert(false, "Unsupported nonlinear function.");
+    }
+#else
     if (nonlinear_ == "relu")
     {
         relu_gpu(prev_layer_->forwardTensor_, forwardTensor_);
@@ -132,6 +190,7 @@ void LayerAct::gpu_forward(int realBatchSize, bool train)
     {
         Assert(false, "Unsupported nonlinear function.");
     }
+#endif
 }
 
 /* backward propagation */
@@ -139,6 +198,32 @@ void LayerAct::gpu_backward(int realBatchSize)
 {
     clear_gpu(prev_layer_->backwardTensor_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    if ((nonlinear_ == "relu") || (nonlinear_ == "sigmoid") || (nonlinear_ == "tanh"))
+    {
+        CHECK_CUDNN_ERRORS(cudnnActivationBackward(cudnn_handle(), act_desc_, &one,
+            forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr(),
+            backwardTensor_->getTensorDescriptor(), backwardTensor_->getGpuPtr(),
+            prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+            &zero,
+            prev_layer_->backwardTensor_->getTensorDescriptor(), prev_layer_->backwardTensor_->getGpuPtr()));
+    }
+    else if (nonlinear_ == "softmax")
+    {
+        CHECK_CUDNN_ERRORS(cudnnSoftmaxBackward(cudnn_handle(), CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_CHANNEL, &one,
+            forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr(),
+            backwardTensor_->getTensorDescriptor(), backwardTensor_->getGpuPtr(),
+            &zero,
+            prev_layer_->backwardTensor_->getTensorDescriptor(), prev_layer_->backwardTensor_->getGpuPtr()));
+    }
+    else
+    {
+        Assert(false, "Unsupported nonlinear function.");
+    }
+#else
     if (nonlinear_ == "relu")
     {
         backward_relu_gpu(backwardTensor_, forwardTensor_, prev_layer_->backwardTensor_);
@@ -159,6 +244,7 @@ void LayerAct::gpu_backward(int realBatchSize)
     {
         Assert(false, "Unsupported nonlinear function.");
     }
+#endif
 }
 
 /* update weights and biases */

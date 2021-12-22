@@ -20,6 +20,7 @@
 
 #include "includes.h"
 
+// FIXME: need implement my own gemm on gpu
 /* TA: transpose for A;    TB: transpose for B
  * A(M*K) X B(K*N) = C(M*N)
  * lda ldb and ldc are the lengths of the last dimension of A B and C
@@ -32,8 +33,6 @@ void gemm_gpu(int TA, int TB, int M, int N, int K, float *A_gpu, int lda, float 
 {
     float ALPHA_BETA = 1;
 
-    cublasHandle_t handle = blas_handle();
-    cublasStatus_t status = cublasSgemm(handle, (TB ? CUBLAS_OP_T : CUBLAS_OP_N), (TA ? CUBLAS_OP_T : CUBLAS_OP_N),
-            N, M, K, &ALPHA_BETA, B_gpu, ldb, A_gpu, lda, &ALPHA_BETA, C_gpu, ldc);
-    check_cublas_error(status);
+    CHECK_CUBLAS_ERRORS(cublasSgemm(cublas_handle(), (TB ? CUBLAS_OP_T : CUBLAS_OP_N), (TA ? CUBLAS_OP_T : CUBLAS_OP_N),
+            N, M, K, &ALPHA_BETA, B_gpu, ldb, A_gpu, lda, &ALPHA_BETA, C_gpu, ldc));
 }

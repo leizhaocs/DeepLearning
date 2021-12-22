@@ -45,6 +45,9 @@
 #include <cuda.h>
 #include <curand_kernel.h>
 #include <helper_cuda.h>
+#if CUDNN == 1
+#include <cudnn.h>
+#endif
 #endif
 
 #ifndef __host__

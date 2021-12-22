@@ -53,6 +53,14 @@ LayerBN::LayerBN(Params *params, Layer *prev_layer)
 
     temp1_ = new Tensor<float>(1, c_, 1, 1);
     temp2_ = new Tensor<float>(1, c_, 1, 1);
+
+#if GPU == 1
+#if CUDNN == 1
+    CHECK_CUDNN_ERRORS(cudnnCreateTensorDescriptor(&scale_bias_mean_var_desc_));
+    CHECK_CUDNN_ERRORS(cudnnDeriveBNTensorDescriptor(scale_bias_mean_var_desc_, prev_layer_->forwardTensor_->getTensorDescriptor(),
+        CUDNN_BATCHNORM_SPATIAL));
+#endif
+#endif
 }
 
 /* destructor */
@@ -72,6 +80,11 @@ LayerBN::~LayerBN()
     delete grad_xhat_;
     delete temp1_;
     delete temp2_;
+#if GPU == 1
+#if CUDNN == 1
+    CHECK_CUDNN_ERRORS(cudnnDestroyTensorDescriptor(scale_bias_mean_var_desc_));
+#endif
+#endif
 }
 
 /* forward propagation */
@@ -124,6 +137,30 @@ void LayerBN::gpu_forward(int realBatchSize, bool train)
 {
     clear_gpu(forwardTensor_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    if (train)
+    {
+        CHECK_CUDNN_ERRORS(cudnnBatchNormalizationForwardTraining(cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &one, &zero,
+            prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+            forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr(),
+            scale_bias_mean_var_desc_, gamma_->getGpuPtr(), beta_->getGpuPtr(),
+            0.01,
+            running_mean_->getGpuPtr(), running_var_->getGpuPtr(),
+            EPSILON,
+            mean_->getGpuPtr(), var_->getGpuPtr()));
+    }
+    else
+    {
+        CHECK_CUDNN_ERRORS(cudnnBatchNormalizationForwardInference(cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &one, &zero,
+            prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+            forwardTensor_->getTensorDescriptor(), forwardTensor_->getGpuPtr(),
+            scale_bias_mean_var_desc_, gamma_->getGpuPtr(), beta_->getGpuPtr(), running_mean_->getGpuPtr(), running_var_->getGpuPtr(),
+            EPSILON));
+    }
+#else
     if (train)
     {
         mean_keep_channel_gpu(mean_, prev_layer_->forwardTensor_);
@@ -139,6 +176,7 @@ void LayerBN::gpu_forward(int realBatchSize, bool train)
         normalize_expand_channel_gpu(xhat_, prev_layer_->forwardTensor_, running_mean_, running_var_);
         scale_shift_expand_channel_gpu(forwardTensor_, xhat_, gamma_, beta_);
     }
+#endif
 }
 
 /* backward propagation */
@@ -148,19 +186,37 @@ void LayerBN::gpu_backward(int realBatchSize)
     clear_gpu(grad_beta_);
     clear_gpu(grad_gamma_);
 
+#if CUDNN == 1
+    const float one  =  1.f;
+    const float zero =  0.f;
+
+    CHECK_CUDNN_ERRORS(cudnnBatchNormalizationBackward(cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &one, &zero, &one, &zero,
+        prev_layer_->forwardTensor_->getTensorDescriptor(), prev_layer_->forwardTensor_->getGpuPtr(),
+        backwardTensor_->getTensorDescriptor(), backwardTensor_->getGpuPtr(),
+        prev_layer_->backwardTensor_->getTensorDescriptor(), prev_layer_->backwardTensor_->getGpuPtr(),
+        scale_bias_mean_var_desc_, gamma_->getGpuPtr(), grad_gamma_->getGpuPtr(), grad_beta_->getGpuPtr(),
+        EPSILON,
+        mean_->getGpuPtr(), var_->getGpuPtr()));
+#else
     mult_expand_channel_gpu(grad_xhat_, backwardTensor_, gamma_);
     backward_batchnorm_gpu(prev_layer_->backwardTensor_, grad_xhat_, xhat_, var_, temp1_, temp2_);
 
     sum_keep_channel_gpu(grad_beta_, backwardTensor_);
     product_sum_keep_channel_gpu(grad_gamma_, backwardTensor_, xhat_);
+#endif
 }
 
 /* update weights and biases */
 void LayerBN::gpu_update(int realBatchSize, float lr)
 {
     float step = -lr/realBatchSize;
+#if CUDNN == 1
+    CHECK_CUBLAS_ERRORS(cublasSaxpy(cublas_handle(), beta_->total_size(), &step, grad_beta_->getGpuPtr(), 1, beta_->getGpuPtr(), 1));
+    CHECK_CUBLAS_ERRORS(cublasSaxpy(cublas_handle(), gamma_->total_size(), &step, grad_gamma_->getGpuPtr(), 1, gamma_->getGpuPtr(), 1));
+#else
     axpy_gpu(beta_, grad_beta_, step);
     axpy_gpu(gamma_, grad_gamma_, step);
+#endif
 }
 #endif
 

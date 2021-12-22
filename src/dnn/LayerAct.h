@@ -64,6 +64,12 @@ public:
 
 private:
     string nonlinear_;  // activation type
+
+#if GPU == 1
+#if CUDNN == 1
+    cudnnActivationDescriptor_t act_desc_;  // activation descriptor
+#endif
+#endif
 };
 
 #endif
